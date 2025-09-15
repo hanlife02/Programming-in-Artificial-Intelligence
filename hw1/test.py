@@ -12,3 +12,5 @@ trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True
 trainloader = torch.utils.data.DataLoader(
 trainset,batch_size=batch_size, shuffle=True, num_workers=2)
 
+dataiter = iter(trainloader)
+images, labels = next(dataiter)
