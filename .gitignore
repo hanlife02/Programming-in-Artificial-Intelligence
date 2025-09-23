@@ -3,3 +3,4 @@ runs
 results
 *.ipynb
 *.pth
+__pycache__
