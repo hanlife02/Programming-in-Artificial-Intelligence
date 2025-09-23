@@ -5,12 +5,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
-import os
 
 def train_model():
     """训练CIFAR-10分类模型"""
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
+
+    writer = SummaryWriter('./runs')
 
     transform = transforms.Compose(
         [transforms.ToTensor(),
@@ -52,7 +53,8 @@ def train_model():
     # 损失函数与优化器定义
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
-
+    
+    # 训练模型
     for epoch in range(10):
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
@@ -73,7 +75,8 @@ def train_model():
 
     PATH = './cifar_net.pth'
     torch.save(net.state_dict(), PATH)
-    
+
+    # 模型评估
     correct = 0
     total = 0
     with torch.no_grad():
