@@ -4,16 +4,13 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import csv
+from torch.utils.tensorboard import SummaryWriter
 import os
 
 def train_model():
     """训练CIFAR-10分类模型"""
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
-
-    # 创建results目录，存loss curve数据
-    os.makedirs('results', exist_ok=True)
 
     transform = transforms.Compose(
         [transforms.ToTensor(),
@@ -56,104 +53,33 @@ def train_model():
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
-    # 初始化CSV文件保存训练数据
-    csv_file = 'results/training_data.csv'
-    with open(csv_file, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['epoch', 'batch', 'train_loss', 'val_loss', 'val_accuracy'])
-
-    # 记录损失的频率（每多少个batch记录一次）
-    log_interval = 500
-
-    # 模型训练：训练10个epoch
-    for epoch in range(10):
+    for epoch in range(2):
         running_loss = 0.0
-        epoch_loss = 0.0
-        
         for i, data in enumerate(trainloader, 0):
             inputs, labels = data
-            inputs, labels = inputs.to(device), labels.to(device)
+            inputs, labels = data[0].to(device), data[1].to(device)
             optimizer.zero_grad()
             outputs = net(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+
             running_loss += loss.item()
-            epoch_loss += loss.item()
-            
-            # 每log_interval个batch记录一次损失
-            if (i + 1) % log_interval == 0:
-                # 计算验证损失
-                net.eval()
-                val_loss = 0.0
-                correct = 0
-                total = 0
-                with torch.no_grad():
-                    for val_data in testloader:
-                        val_images, val_labels = val_data
-                        val_images, val_labels = val_images.to(device), val_labels.to(device)
-                        val_outputs = net(val_images)
-                        val_loss += criterion(val_outputs, val_labels).item()
-                        _, predicted = torch.max(val_outputs, 1)
-                        total += val_labels.size(0)
-                        correct += (predicted == val_labels).sum().item()
-                
-                val_avg_loss = val_loss / len(testloader)
-                val_accuracy = 100 * correct / total
-                avg_train_loss = running_loss / log_interval
-                
-                # 记录到CSV
-                with open(csv_file, 'a', newline='') as f:
-                    csv_writer = csv.writer(f)
-                    csv_writer.writerow([epoch + 1, i + 1, avg_train_loss, val_avg_loss, val_accuracy])
-                
-                print(f'[{epoch + 1}, {i + 1:5d}] Train Loss: {avg_train_loss:.3f}, Val Loss: {val_avg_loss:.3f}, Val Acc: {val_accuracy:.2f}%')
+            if i % 2000 == 1999:
+                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
                 running_loss = 0.0
-                net.train()
-        
-        # 在每个epoch结束时也记录一次
-        epoch_avg_loss = epoch_loss / len(trainloader)
-        
-        net.eval()
-        val_loss = 0.0
-        correct = 0
-        total = 0
-        with torch.no_grad():
-            for data in testloader:
-                images, labels = data
-                images, labels = images.to(device), labels.to(device)
-                outputs = net(images)
-                loss = criterion(outputs, labels)
-                val_loss += loss.item()
-                _, predicted = torch.max(outputs, 1)
-                total += labels.size(0)
-                correct += (predicted == labels).sum().item()
-        
-        val_avg_loss = val_loss / len(testloader)
-        val_accuracy = 100 * correct / total
-        
-        # 记录epoch结束时的数据
-        with open(csv_file, 'a', newline='') as f:
-            csv_writer = csv.writer(f)
-            csv_writer.writerow([epoch + 1, len(trainloader), epoch_avg_loss, val_avg_loss, val_accuracy])
-        
-        print(f'Epoch [{epoch + 1}/10] End - Train Loss: {epoch_avg_loss:.4f}, Val Loss: {val_avg_loss:.4f}, Val Acc: {val_accuracy:.2f}%')
-        net.train()
 
     print('Finished Training')
 
     PATH = './cifar_net.pth'
     torch.save(net.state_dict(), PATH)
-
-    print('Training data saved to results/training_data.csv')
-
-    # 模型测试：在测试集上测试模型，计算平均准确率，以及在各个类别上单独的准确率
+    
     correct = 0
     total = 0
     with torch.no_grad():
         for data in testloader:
             images, labels = data
-            images, labels = images.to(device), labels.to(device)
+            inputs, labels = data[0].to(device), data[1].to(device)
             outputs = net(images)
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
@@ -167,7 +93,7 @@ def train_model():
     with torch.no_grad():
         for data in testloader:
             images, labels = data
-            images, labels = images.to(device), labels.to(device)
+            inputs, labels = data[0].to(device), data[1].to(device)
             outputs = net(images)
             _, predictions = torch.max(outputs, 1)
             for label, prediction in zip(labels, predictions):
