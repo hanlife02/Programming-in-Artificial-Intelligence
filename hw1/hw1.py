@@ -51,6 +51,12 @@ optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 # 初始化Tensorboard writer
 writer = SummaryWriter('runs/cifar10_lenet_experiment')
 
+dataiter = iter(trainloader)
+images, labels = next(dataiter)
+img_grid = torchvision.utils.make_grid(images)
+writer.add_image('CIFAR10_Sample_Images', img_grid)
+writer.add_graph(net, images)
+
 # 模型训练：训练10个epoch
 for epoch in range(10):
     running_loss = 0.0
