@@ -5,10 +5,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
+import matplotlib.pyplot as plt
+import os
 
 def main():
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
+
+    # 创建results目录
+    os.makedirs('results', exist_ok=True)
 
     transform = transforms.Compose(
         [transforms.ToTensor(),
@@ -59,6 +64,11 @@ def main():
     writer.add_image('CIFAR10_Sample_Images', img_grid)
     writer.add_graph(net, images)
 
+    # 用于保存损失数据
+    train_losses = []
+    val_losses = []
+    val_accuracies = []
+
     # 模型训练：训练10个epoch
     for epoch in range(10):
         running_loss = 0.0
@@ -81,6 +91,7 @@ def main():
         # 记录每个epoch的平均loss
         epoch_avg_loss = epoch_loss / len(trainloader)
         writer.add_scalar('Loss/Train_Epoch', epoch_avg_loss, epoch)
+        train_losses.append(epoch_avg_loss)
         
         # 计算验证集上的loss和accuracy
         net.eval()
@@ -104,6 +115,10 @@ def main():
         writer.add_scalar('Loss/Validation', val_avg_loss, epoch)
         writer.add_scalar('Accuracy/Validation', val_accuracy, epoch)
         
+        # 保存数据用于绘图
+        val_losses.append(val_avg_loss)
+        val_accuracies.append(val_accuracy)
+        
         print(f'Epoch [{epoch + 1}/10], Train Loss: {epoch_avg_loss:.4f}, Val Loss: {val_avg_loss:.4f}, Val Acc: {val_accuracy:.2f}%')
         
         net.train()
@@ -115,6 +130,34 @@ def main():
 
     # 关闭Tensorboard writer
     writer.close()
+
+    # 绘制损失曲线并保存
+    plt.figure(figsize=(12, 4))
+    
+    # 绘制训练和验证损失
+    plt.subplot(1, 2, 1)
+    epochs = range(1, 11)
+    plt.plot(epochs, train_losses, 'b-', label='Training Loss')
+    plt.plot(epochs, val_losses, 'r-', label='Validation Loss')
+    plt.title('Training and Validation Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.grid(True)
+    
+    # 绘制验证准确率
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, val_accuracies, 'g-', label='Validation Accuracy')
+    plt.title('Validation Accuracy')
+    plt.xlabel('Epoch')
+    plt.ylabel('Accuracy (%)')
+    plt.legend()
+    plt.grid(True)
+    
+    plt.tight_layout()
+    plt.savefig('results/loss_curve.png', dpi=300, bbox_inches='tight')
+    plt.savefig('results/loss_curve.pdf', bbox_inches='tight')
+    print('Loss curves saved to results/loss_curve.png and results/loss_curve.pdf')
 
     # 模型测试：在测试集上测试模型，计算平均准确率，以及在各个类别上单独的准确率
     correct = 0
