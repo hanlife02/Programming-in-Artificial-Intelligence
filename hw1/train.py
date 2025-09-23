@@ -68,10 +68,14 @@ def train_model():
 
             running_loss += loss.item()
             if i % 2000 == 1999:
-                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+                avg_loss = running_loss / 2000
+                print(f'[{epoch + 1}, {i + 1:5d}] loss: {avg_loss:.3f}')
+                writer.add_scalar('training loss', avg_loss, epoch * len(trainloader) + i)
                 running_loss = 0.0
 
     print('Finished Training')
+    
+    writer.close()
 
     PATH = './cifar_net.pth'
     torch.save(net.state_dict(), PATH)
