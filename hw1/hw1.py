@@ -156,8 +156,6 @@ def main():
     
     plt.tight_layout()
     plt.savefig('results/loss_curve.png', dpi=300, bbox_inches='tight')
-    plt.savefig('results/loss_curve.pdf', bbox_inches='tight')
-    print('Loss curves saved to results/loss_curve.png and results/loss_curve.pdf')
 
     # 模型测试：在测试集上测试模型，计算平均准确率，以及在各个类别上单独的准确率
     correct = 0
