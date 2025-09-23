@@ -25,13 +25,16 @@ def plot_loss_curves(csv_file='results/training_data.csv'):
     os.makedirs('results', exist_ok=True)
     
     # 创建图表
-    plt.figure(figsize=(8, 6))
+    plt.figure(figsize=(12, 8))
+    
+    # 计算总体的batch索引（跨epoch）
+    data['total_batch'] = (data['epoch'] - 1) * data['batch'].max() + data['batch']
     
     # 绘制训练和验证损失
-    plt.plot(data['epoch'], data['train_loss'], 'b-', label='Training Loss', marker='o')
-    plt.plot(data['epoch'], data['val_loss'], 'r-', label='Validation Loss', marker='s')
-    plt.title('Training and Validation Loss')
-    plt.xlabel('Epoch')
+    plt.plot(data['total_batch'], data['train_loss'], 'b-', label='Training Loss', linewidth=1.5, alpha=0.8)
+    plt.plot(data['total_batch'], data['val_loss'], 'r-', label='Validation Loss', linewidth=1.5, alpha=0.8)
+    plt.title('Training and Validation Loss (High Resolution)')
+    plt.xlabel('Batch')
     plt.ylabel('Loss')
     plt.legend()
     plt.grid(True, alpha=0.3)

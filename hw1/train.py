@@ -60,17 +60,22 @@ def train_model():
     csv_file = 'results/training_data.csv'
     with open(csv_file, 'w', newline='') as f:
         writer = csv.writer(f)
-        writer.writerow(['epoch', 'train_loss', 'val_loss', 'val_accuracy'])
+        writer.writerow(['epoch', 'batch', 'train_loss', 'val_loss', 'val_accuracy'])
 
     # 用于保存损失数据
     train_losses = []
     val_losses = []
     val_accuracies = []
+    
+    # 记录损失的频率（每多少个batch记录一次）
+    log_interval = 500
 
     # 模型训练：训练10个epoch
     for epoch in range(10):
         running_loss = 0.0
         epoch_loss = 0.0
+        batch_count = 0
+        
         for i, data in enumerate(trainloader, 0):
             inputs, labels = data
             inputs, labels = inputs.to(device), labels.to(device)
@@ -81,12 +86,40 @@ def train_model():
             optimizer.step()
             running_loss += loss.item()
             epoch_loss += loss.item()
-            if i % 2000 == 1999:
-                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+            batch_count += 1
+            
+            # 每log_interval个batch记录一次损失
+            if (i + 1) % log_interval == 0:
+                # 计算验证损失
+                net.eval()
+                val_loss = 0.0
+                correct = 0
+                total = 0
+                with torch.no_grad():
+                    for val_data in testloader:
+                        val_images, val_labels = val_data
+                        val_images, val_labels = val_images.to(device), val_labels.to(device)
+                        val_outputs = net(val_images)
+                        val_loss += criterion(val_outputs, val_labels).item()
+                        _, predicted = torch.max(val_outputs, 1)
+                        total += val_labels.size(0)
+                        correct += (predicted == val_labels).sum().item()
+                
+                val_avg_loss = val_loss / len(testloader)
+                val_accuracy = 100 * correct / total
+                avg_train_loss = running_loss / log_interval
+                
+                # 记录到CSV
+                with open(csv_file, 'a', newline='') as f:
+                    csv_writer = csv.writer(f)
+                    csv_writer.writerow([epoch + 1, i + 1, avg_train_loss, val_avg_loss, val_accuracy])
+                
+                print(f'[{epoch + 1}, {i + 1:5d}] Train Loss: {avg_train_loss:.3f}, Val Loss: {val_avg_loss:.3f}, Val Acc: {val_accuracy:.2f}%')
                 running_loss = 0.0
+                net.train()
         
+        # 在每个epoch结束时也记录一次
         epoch_avg_loss = epoch_loss / len(trainloader)
-        train_losses.append(epoch_avg_loss)
         
         net.eval()
         val_loss = 0.0
@@ -106,15 +139,12 @@ def train_model():
         val_avg_loss = val_loss / len(testloader)
         val_accuracy = 100 * correct / total
         
-        val_losses.append(val_avg_loss)
-        val_accuracies.append(val_accuracy)
-        
+        # 记录epoch结束时的数据
         with open(csv_file, 'a', newline='') as f:
             csv_writer = csv.writer(f)
-            csv_writer.writerow([epoch + 1, epoch_avg_loss, val_avg_loss, val_accuracy])
+            csv_writer.writerow([epoch + 1, len(trainloader), epoch_avg_loss, val_avg_loss, val_accuracy])
         
-        print(f'Epoch [{epoch + 1}/10], Train Loss: {epoch_avg_loss:.4f}, Val Loss: {val_avg_loss:.4f}, Val Acc: {val_accuracy:.2f}%')
-        
+        print(f'Epoch [{epoch + 1}/10] End - Train Loss: {epoch_avg_loss:.4f}, Val Loss: {val_avg_loss:.4f}, Val Acc: {val_accuracy:.2f}%')
         net.train()
 
     print('Finished Training')
