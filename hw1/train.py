@@ -62,11 +62,6 @@ def train_model():
         writer = csv.writer(f)
         writer.writerow(['epoch', 'batch', 'train_loss', 'val_loss', 'val_accuracy'])
 
-    # 用于保存损失数据
-    train_losses = []
-    val_losses = []
-    val_accuracies = []
-    
     # 记录损失的频率（每多少个batch记录一次）
     log_interval = 500
 
@@ -74,7 +69,6 @@ def train_model():
     for epoch in range(10):
         running_loss = 0.0
         epoch_loss = 0.0
-        batch_count = 0
         
         for i, data in enumerate(trainloader, 0):
             inputs, labels = data
@@ -86,7 +80,6 @@ def train_model():
             optimizer.step()
             running_loss += loss.item()
             epoch_loss += loss.item()
-            batch_count += 1
             
             # 每log_interval个batch记录一次损失
             if (i + 1) % log_interval == 0:
