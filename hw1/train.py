@@ -68,7 +68,7 @@ def train_model():
 
             running_loss += loss.item()
             if i % 2000 == 1999:
-                avg_loss = running_loss / 2000
+                avg_loss = running_loss / 500
                 print(f'[{epoch + 1}, {i + 1:5d}] loss: {avg_loss:.3f}')
                 writer.add_scalar('training loss', avg_loss, epoch * len(trainloader) + i)
                 running_loss = 0.0
