@@ -4,8 +4,7 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
-import matplotlib.pyplot as plt
+import csv
 import os
 
 def main():
@@ -55,14 +54,11 @@ def main():
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
-    # 初始化Tensorboard writer
-    writer = SummaryWriter('runs/cifar10_lenet_experiment')
-
-    dataiter = iter(trainloader)
-    images, labels = next(dataiter)
-    img_grid = torchvision.utils.make_grid(images)
-    writer.add_image('CIFAR10_Sample_Images', img_grid)
-    writer.add_graph(net, images)
+    # 初始化CSV文件保存训练数据
+    csv_file = 'results/training_data.csv'
+    with open(csv_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['epoch', 'train_loss', 'val_loss', 'val_accuracy'])
 
     # 用于保存损失数据
     train_losses = []
@@ -84,13 +80,10 @@ def main():
             epoch_loss += loss.item()
             if i % 2000 == 1999:
                 print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
-                # 记录平均loss到Tensorboard
-                writer.add_scalar('Loss/Train_Batch', running_loss / 2000, epoch * len(trainloader) + i)
                 running_loss = 0.0
         
         # 记录每个epoch的平均loss
         epoch_avg_loss = epoch_loss / len(trainloader)
-        writer.add_scalar('Loss/Train_Epoch', epoch_avg_loss, epoch)
         train_losses.append(epoch_avg_loss)
         
         # 计算验证集上的loss和accuracy
@@ -111,13 +104,14 @@ def main():
         val_avg_loss = val_loss / len(testloader)
         val_accuracy = 100 * correct / total
         
-        # 记录验证loss和accuracy到Tensorboard
-        writer.add_scalar('Loss/Validation', val_avg_loss, epoch)
-        writer.add_scalar('Accuracy/Validation', val_accuracy, epoch)
-        
         # 保存数据用于绘图
         val_losses.append(val_avg_loss)
         val_accuracies.append(val_accuracy)
+        
+        # 保存数据到CSV文件
+        with open(csv_file, 'a', newline='') as f:
+            csv_writer = csv.writer(f)
+            csv_writer.writerow([epoch + 1, epoch_avg_loss, val_avg_loss, val_accuracy])
         
         print(f'Epoch [{epoch + 1}/10], Train Loss: {epoch_avg_loss:.4f}, Val Loss: {val_avg_loss:.4f}, Val Acc: {val_accuracy:.2f}%')
         
@@ -128,34 +122,16 @@ def main():
     PATH = './cifar_net.pth'
     torch.save(net.state_dict(), PATH)
 
-    # 关闭Tensorboard writer
-    writer.close()
-
-    # 绘制损失曲线并保存
-    plt.figure(figsize=(12, 4))
+    print('Training data saved to results/training_data.csv')
     
-    # 绘制训练和验证损失
-    plt.subplot(1, 2, 1)
-    epochs = range(1, 11)
-    plt.plot(epochs, train_losses, 'b-', label='Training Loss')
-    plt.plot(epochs, val_losses, 'r-', label='Validation Loss')
-    plt.title('Training and Validation Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.grid(True)
-    
-    # 绘制验证准确率
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, val_accuracies, 'g-', label='Validation Accuracy')
-    plt.title('Validation Accuracy')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy (%)')
-    plt.legend()
-    plt.grid(True)
-    
-    plt.tight_layout()
-    plt.savefig('results/loss_curve.png', dpi=300, bbox_inches='tight')
+    # 调用draw.py绘制损失曲线
+    try:
+        from draw import plot_loss_curves
+        plot_loss_curves()
+    except ImportError as e:
+        print(f"Warning: Could not import draw module: {e}")
+    except Exception as e:
+        print(f"Warning: Error plotting loss curves: {e}")
 
     # 模型测试：在测试集上测试模型，计算平均准确率，以及在各个类别上单独的准确率
     correct = 0
