@@ -4,6 +4,7 @@ import torchvision.transforms as transforms
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from torch.utils.tensorboard import SummaryWriter
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -47,9 +48,13 @@ net = Net()
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9)
 
+# 初始化Tensorboard writer
+writer = SummaryWriter('runs/cifar10_lenet_experiment')
+
 # 模型训练：训练10个epoch
 for epoch in range(10):
     running_loss = 0.0
+    epoch_loss = 0.0
     for i, data in enumerate(trainloader, 0):
         inputs, labels = data
         optimizer.zero_grad()
@@ -58,14 +63,50 @@ for epoch in range(10):
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
+        epoch_loss += loss.item()
         if i % 2000 == 1999:
             print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+            # 记录平均loss到Tensorboard
+            writer.add_scalar('Loss/Train_Batch', running_loss / 2000, epoch * len(trainloader) + i)
             running_loss = 0.0
+    
+    # 记录每个epoch的平均loss
+    epoch_avg_loss = epoch_loss / len(trainloader)
+    writer.add_scalar('Loss/Train_Epoch', epoch_avg_loss, epoch)
+    
+    # 计算验证集上的loss和accuracy
+    net.eval()
+    val_loss = 0.0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for data in testloader:
+            images, labels = data
+            outputs = net(images)
+            loss = criterion(outputs, labels)
+            val_loss += loss.item()
+            _, predicted = torch.max(outputs, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    
+    val_avg_loss = val_loss / len(testloader)
+    val_accuracy = 100 * correct / total
+    
+    # 记录验证loss和accuracy到Tensorboard
+    writer.add_scalar('Loss/Validation', val_avg_loss, epoch)
+    writer.add_scalar('Accuracy/Validation', val_accuracy, epoch)
+    
+    print(f'Epoch [{epoch + 1}/10], Train Loss: {epoch_avg_loss:.4f}, Val Loss: {val_avg_loss:.4f}, Val Acc: {val_accuracy:.2f}%')
+    
+    net.train()
 
 print('Finished Training')
 
 PATH = './cifar_net.pth'
 torch.save(net.state_dict(), PATH)
+
+# 关闭Tensorboard writer
+writer.close()
 
 # 模型测试：在测试集上测试模型，计算平均准确率，以及在各个类别上单独的准确率
 correct = 0
