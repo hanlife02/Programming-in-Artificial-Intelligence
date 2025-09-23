@@ -7,11 +7,12 @@ import torch.optim as optim
 import csv
 import os
 
-def main():
+def train_model():
+    """训练CIFAR-10分类模型"""
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f'Using device: {device}')
 
-    # 创建results目录
+    # 创建results目录，存loss curve数据
     os.makedirs('results', exist_ok=True)
 
     transform = transforms.Compose(
@@ -49,6 +50,7 @@ def main():
             return x
         
     net = Net()
+    net.to(device)
 
     # 损失函数与优化器定义
     criterion = nn.CrossEntropyLoss()
@@ -71,6 +73,7 @@ def main():
         epoch_loss = 0.0
         for i, data in enumerate(trainloader, 0):
             inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = net(inputs)
             loss = criterion(outputs, labels)
@@ -82,11 +85,9 @@ def main():
                 print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
                 running_loss = 0.0
         
-        # 记录每个epoch的平均loss
         epoch_avg_loss = epoch_loss / len(trainloader)
         train_losses.append(epoch_avg_loss)
         
-        # 计算验证集上的loss和accuracy
         net.eval()
         val_loss = 0.0
         correct = 0
@@ -94,6 +95,7 @@ def main():
         with torch.no_grad():
             for data in testloader:
                 images, labels = data
+                images, labels = images.to(device), labels.to(device)
                 outputs = net(images)
                 loss = criterion(outputs, labels)
                 val_loss += loss.item()
@@ -104,11 +106,9 @@ def main():
         val_avg_loss = val_loss / len(testloader)
         val_accuracy = 100 * correct / total
         
-        # 保存数据用于绘图
         val_losses.append(val_avg_loss)
         val_accuracies.append(val_accuracy)
         
-        # 保存数据到CSV文件
         with open(csv_file, 'a', newline='') as f:
             csv_writer = csv.writer(f)
             csv_writer.writerow([epoch + 1, epoch_avg_loss, val_avg_loss, val_accuracy])
@@ -123,15 +123,6 @@ def main():
     torch.save(net.state_dict(), PATH)
 
     print('Training data saved to results/training_data.csv')
-    
-    # 调用draw.py绘制损失曲线
-    try:
-        from draw import plot_loss_curves
-        plot_loss_curves()
-    except ImportError as e:
-        print(f"Warning: Could not import draw module: {e}")
-    except Exception as e:
-        print(f"Warning: Error plotting loss curves: {e}")
 
     # 模型测试：在测试集上测试模型，计算平均准确率，以及在各个类别上单独的准确率
     correct = 0
@@ -139,6 +130,7 @@ def main():
     with torch.no_grad():
         for data in testloader:
             images, labels = data
+            images, labels = images.to(device), labels.to(device)
             outputs = net(images)
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
@@ -152,6 +144,7 @@ def main():
     with torch.no_grad():
         for data in testloader:
             images, labels = data
+            images, labels = images.to(device), labels.to(device)
             outputs = net(images)
             _, predictions = torch.max(outputs, 1)
             for label, prediction in zip(labels, predictions):
@@ -162,6 +155,6 @@ def main():
     for classname, correct_count in correct_pred.items():
         accuracy = 100 * float(correct_count) / total_pred[classname]
         print(f'Accuracy for class: {classname:5s} is {accuracy:.1f} %')
-    
+
 if __name__ == '__main__':
-    main()
+    train_model()
