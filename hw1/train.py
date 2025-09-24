@@ -58,7 +58,6 @@ def train_model():
     for epoch in range(10):
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
-            inputs, labels = data
             inputs, labels = data[0].to(device), data[1].to(device)
             optimizer.zero_grad()
             outputs = net(inputs)
@@ -68,7 +67,7 @@ def train_model():
 
             running_loss += loss.item()
             if i % 2000 == 1999:
-                avg_loss = running_loss / 500
+                avg_loss = running_loss / 2000
                 print(f'[{epoch + 1}, {i + 1:5d}] loss: {avg_loss:.3f}')
                 writer.add_scalar('training loss', avg_loss, epoch * len(trainloader) + i)
                 running_loss = 0.0
@@ -85,9 +84,8 @@ def train_model():
     total = 0
     with torch.no_grad():
         for data in testloader:
-            images, labels = data
             inputs, labels = data[0].to(device), data[1].to(device)
-            outputs = net(images)
+            outputs = net(inputs)
             _, predicted = torch.max(outputs, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
@@ -99,9 +97,8 @@ def train_model():
 
     with torch.no_grad():
         for data in testloader:
-            images, labels = data
             inputs, labels = data[0].to(device), data[1].to(device)
-            outputs = net(images)
+            outputs = net(inputs)
             _, predictions = torch.max(outputs, 1)
             for label, prediction in zip(labels, predictions):
                 if label == prediction:
