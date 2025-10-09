@@ -1,208 +1,162 @@
 #include "Tensor.h"
 #include <cuda_runtime.h>
-#include <iostream>
 #include <cstring>
-#include <random>
 
-// Check CUDA API call return values
-#define CUDA_CHECK(call)                                                     \
-    do                                                                       \
-    {                                                                        \
-        cudaError_t err = call;                                              \
-        if (err != cudaSuccess)                                              \
-        {                                                                    \
-            std::cerr << "CUDA Error: " << cudaGetErrorString(err) << " at " \
-                      << __FILE__ << ":" << __LINE__ << std::endl;           \
-            exit(EXIT_FAILURE);                                              \
-        }                                                                    \
-    } while (0)
+// ============================================================================
+// 私有辅助方法实现
+// ============================================================================
 
-// CUDA GPU memory deleter
-struct CudaDeleter
-{
-    void operator()(float *ptr) const
-    {
-        if (ptr) {
-            CUDA_CHECK(cudaFree(ptr));
+// 计算张量总元素数量
+size_t Tensor::calculate_total_size(const std::vector<int>& shape) const {
+    size_t total = 1;
+    for (int dim : shape) {
+        if (dim <= 0) {
+            throw std::invalid_argument("张量维度必须为正数");
+        }
+        total *= dim;
+    }
+    return total;
+}
+
+// 分配内存（根据设备类型分配CPU或GPU内存）
+void Tensor::allocate_memory() {
+    if (total_size_ == 0) {
+        data_ = nullptr;
+        return;
+    }
+
+    if (device_ == Device::CPU) {
+        // 在CPU上分配内存，使用自定义删除器来管理内存
+        float* cpu_ptr = new float[total_size_];
+        // 初始化为0
+        std::memset(cpu_ptr, 0, total_size_ * sizeof(float));
+        // 使用自定义删除器创建智能指针
+        data_ = std::shared_ptr<float>(cpu_ptr, [](float* ptr) {
+            delete[] ptr;
+        });
+    } else {  // Device::GPU
+        // 在GPU上分配内存
+        float* gpu_ptr;
+        cudaError_t error = cudaMalloc(&gpu_ptr, total_size_ * sizeof(float));
+        if (error != cudaSuccess) {
+            throw std::runtime_error("GPU内存分配失败: " + std::string(cudaGetErrorString(error)));
+        }
+        // 初始化GPU内存为0
+        cudaMemset(gpu_ptr, 0, total_size_ * sizeof(float));
+        // 使用自定义删除器创建智能指针
+        data_ = std::shared_ptr<float>(gpu_ptr, [](float* ptr) {
+            cudaFree(ptr);
+        });
+    }
+}
+
+// 从另一个张量复制数据（处理CPU-GPU之间的数据传输）
+void Tensor::copy_data_from(const Tensor& other) {
+    if (total_size_ != other.total_size_) {
+        throw std::invalid_argument("张量大小不匹配，无法复制数据");
+    }
+
+    if (total_size_ == 0) {
+        return;  // 空张量无需复制
+    }
+
+    // 根据源和目标设备类型选择复制方式
+    if (device_ == Device::CPU && other.device_ == Device::CPU) {
+        // CPU到CPU：直接内存复制
+        std::memcpy(data_.get(), other.data_.get(), total_size_ * sizeof(float));
+    }
+    else if (device_ == Device::GPU && other.device_ == Device::GPU) {
+        // GPU到GPU：设备间内存复制
+        cudaError_t error = cudaMemcpy(data_.get(), other.data_.get(),
+                                      total_size_ * sizeof(float), cudaMemcpyDeviceToDevice);
+        if (error != cudaSuccess) {
+            throw std::runtime_error("GPU到GPU数据复制失败: " + std::string(cudaGetErrorString(error)));
         }
     }
-};
-
-// Constructor
-Tensor::Tensor(const std::vector<size_t> &shape, Device device)
-    : shape_(shape), device_(device)
-{
-    // Calculate total number of elements
-    num_elements_ = 1;
-    for (size_t dim : shape_)
-    {
-        num_elements_ *= dim;
+    else if (device_ == Device::CPU && other.device_ == Device::GPU) {
+        // GPU到CPU：从设备复制到主机
+        cudaError_t error = cudaMemcpy(data_.get(), other.data_.get(),
+                                      total_size_ * sizeof(float), cudaMemcpyDeviceToHost);
+        if (error != cudaSuccess) {
+            throw std::runtime_error("GPU到CPU数据复制失败: " + std::string(cudaGetErrorString(error)));
+        }
     }
-
-    if (num_elements_ == 0)
-        return;
-
-    // Allocate memory based on device type
-    if (device_ == Device::kCPU)
-    {
-        data_ptr_ = std::shared_ptr<float>(new float[num_elements_], std::default_delete<float[]>());
-    }
-    else
-    { // Device::kGPU
-        float *gpu_ptr;
-        CUDA_CHECK(cudaMalloc(&gpu_ptr, num_elements_ * sizeof(float)));
-        data_ptr_ = std::shared_ptr<float>(gpu_ptr, CudaDeleter());
+    else {  // device_ == Device::GPU && other.device_ == Device::CPU
+        // CPU到GPU：从主机复制到设备
+        cudaError_t error = cudaMemcpy(data_.get(), other.data_.get(),
+                                      total_size_ * sizeof(float), cudaMemcpyHostToDevice);
+        if (error != cudaSuccess) {
+            throw std::runtime_error("CPU到GPU数据复制失败: " + std::string(cudaGetErrorString(error)));
+        }
     }
 }
 
-// Copy constructor
-Tensor::Tensor(const Tensor &other)
-    : shape_(other.shape_), device_(other.device_), num_elements_(other.num_elements_)
-{
-    if (num_elements_ == 0)
-        return;
+// ============================================================================
+// 构造函数和析构函数实现
+// ============================================================================
 
-    // Allocate new memory and copy data based on device type
-    if (device_ == Device::kCPU)
-    {
-        data_ptr_ = std::shared_ptr<float>(new float[num_elements_], std::default_delete<float[]>());
-        std::memcpy(data(), other.data(), num_elements_ * sizeof(float));
-    }
-    else
-    { // Device::kGPU
-        float *gpu_ptr;
-        CUDA_CHECK(cudaMalloc(&gpu_ptr, num_elements_ * sizeof(float)));
-        data_ptr_ = std::shared_ptr<float>(gpu_ptr, CudaDeleter());
-        CUDA_CHECK(cudaMemcpy(data(), other.data(), num_elements_ * sizeof(float), cudaMemcpyDeviceToDevice));
-    }
+// 主构造函数：创建指定形状和设备的张量
+Tensor::Tensor(const std::vector<int>& shape, Device device)
+    : shape_(shape), device_(device) {
+    total_size_ = calculate_total_size(shape);
+    allocate_memory();
 }
 
-// Move constructor
-Tensor::Tensor(Tensor&& other) noexcept
-    : data_ptr_(std::move(other.data_ptr_)),
-      shape_(std::move(other.shape_)),
-      num_elements_(other.num_elements_),
-      device_(other.device_)
-{
-    other.num_elements_ = 0;
+// 拷贝构造函数：创建另一个张量的副本
+Tensor::Tensor(const Tensor& other)
+    : shape_(other.shape_), device_(other.device_), total_size_(other.total_size_) {
+    allocate_memory();
+    copy_data_from(other);
 }
 
-// Copy assignment operator
-Tensor &Tensor::operator=(const Tensor &other)
-{
-    if (this == &other)
-    {
-        return *this;
+// ============================================================================
+// 赋值运算符实现
+// ============================================================================
+
+// 赋值运算符：将另一个张量的内容复制到当前张量
+Tensor& Tensor::operator=(const Tensor& other) {
+    if (this == &other) {
+        return *this;  // 自赋值检查
     }
 
-    // copy-and-swap idiom
-    Tensor temp(other);
-    *this = std::move(temp);
-    return *this;
-}
-
-// Move assignment operator
-Tensor& Tensor::operator=(Tensor&& other) noexcept
-{
-    if (this == &other)
-        return *this;
-
-    data_ptr_ = std::move(other.data_ptr_);
-    shape_ = std::move(other.shape_);
-    num_elements_ = other.num_elements_;
+    // 更新张量属性
+    shape_ = other.shape_;
     device_ = other.device_;
+    total_size_ = other.total_size_;
 
-    other.num_elements_ = 0;
+    // 重新分配内存并复制数据
+    allocate_memory();
+    copy_data_from(other);
+
     return *this;
 }
 
-// Move data to CPU
-Tensor Tensor::cpu() const
-{
-    if (device_ == Device::kCPU)
-    {
-        return *this;  // Already on CPU, return copy
+// ============================================================================
+// 设备迁移方法实现
+// ============================================================================
+
+// 将张量迁移到CPU
+Tensor Tensor::cpu() const {
+    if (device_ == Device::CPU) {
+        // 如果已经在CPU上，直接返回副本
+        return Tensor(*this);
     }
 
-    Tensor cpu_tensor(shape_, Device::kCPU);
-    if (num_elements_ > 0) {
-        CUDA_CHECK(cudaMemcpy(cpu_tensor.data(), this->data(), num_elements_ * sizeof(float), cudaMemcpyDeviceToHost));
-    }
+    // 创建CPU张量并复制数据
+    Tensor cpu_tensor(shape_, Device::CPU);
+    cpu_tensor.copy_data_from(*this);
     return cpu_tensor;
 }
 
-// Move data to GPU
-Tensor Tensor::gpu() const
-{
-    if (device_ == Device::kGPU)
-    {
-        return *this;  // Already on GPU, return copy
+// 将张量迁移到GPU
+Tensor Tensor::gpu() const {
+    if (device_ == Device::GPU) {
+        // 如果已经在GPU上，直接返回副本
+        return Tensor(*this);
     }
 
-    Tensor gpu_tensor(shape_, Device::kGPU);
-    if (num_elements_ > 0) {
-        CUDA_CHECK(cudaMemcpy(gpu_tensor.data(), this->data(), num_elements_ * sizeof(float), cudaMemcpyHostToDevice));
-    }
+    // 创建GPU张量并复制数据
+    Tensor gpu_tensor(shape_, Device::GPU);
+    gpu_tensor.copy_data_from(*this);
     return gpu_tensor;
-}
-
-// Initialize with zeros
-void Tensor::zeros()
-{
-    if (num_elements_ == 0) return;
-
-    if (device_ == Device::kCPU)
-    {
-        std::memset(data(), 0, num_elements_ * sizeof(float));
-    }
-    else
-    {
-        CUDA_CHECK(cudaMemset(data(), 0, num_elements_ * sizeof(float)));
-    }
-}
-
-// Initialize with ones
-void Tensor::ones()
-{
-    if (num_elements_ == 0) return;
-
-    if (device_ == Device::kCPU)
-    {
-        std::fill_n(data(), num_elements_, 1.0f);
-    }
-    else
-    {
-        // For GPU, create data on CPU first, then copy to GPU
-        std::vector<float> ones_data(num_elements_, 1.0f);
-        CUDA_CHECK(cudaMemcpy(data(), ones_data.data(), num_elements_ * sizeof(float), cudaMemcpyHostToDevice));
-    }
-}
-
-// Random initialization
-void Tensor::random(float min, float max)
-{
-    if (num_elements_ == 0) return;
-
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_real_distribution<float> dis(min, max);
-
-    if (device_ == Device::kCPU)
-    {
-        float* ptr = data();
-        for (size_t i = 0; i < num_elements_; ++i)
-        {
-            ptr[i] = dis(gen);
-        }
-    }
-    else
-    {
-        // For GPU, generate random numbers on CPU first, then copy to GPU
-        std::vector<float> random_data(num_elements_);
-        for (size_t i = 0; i < num_elements_; ++i)
-        {
-            random_data[i] = dis(gen);
-        }
-        CUDA_CHECK(cudaMemcpy(data(), random_data.data(), num_elements_ * sizeof(float), cudaMemcpyHostToDevice));
-    }
 }
