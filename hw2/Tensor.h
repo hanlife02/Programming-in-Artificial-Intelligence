@@ -4,7 +4,7 @@
 #include <stdexcept>
 #include <iostream>
 
-// 设备类型
+// Device type
 enum class Device {
     CPU,
     GPU
@@ -12,31 +12,31 @@ enum class Device {
 
 class Tensor {
 private:
-    std::vector<int> shape_;          // 张量形状
-    Device device_;                   // 设备类型
-    size_t total_size_;              // 总元素数量
-    float* data_;                    // 数据指针，手动管理内存
+    std::vector<int> shape_;          // Tensor shape
+    Device device_;                   // Device type
+    size_t total_size_;              // Total number of elements
+    float* data_;                    // Data pointer, manually managed memory
 
-    // 实用方法
-    size_t calculate_total_size(const std::vector<int>& shape) const;  // 计算总元素数
-    void allocate_memory();                                           // 分配内存
-    void deallocate_memory();                                         // 释放内存
-    void copy_data_from(const Tensor& other);                        // 从另一个张量复制数据
+    // Utility methods
+    size_t calculate_total_size(const std::vector<int>& shape) const;  // Calculate total elements
+    void allocate_memory();                                           // Allocate memory
+    void deallocate_memory();                                         // Deallocate memory
+    void copy_data_from(const Tensor& other);                        // Copy data from another tensor
 
 public:
-    // 构造函数和析构函数
+    // Constructors and destructor
     Tensor(const std::vector<int>& shape, Device device);
     Tensor(const Tensor& other);
     ~Tensor();
 
-    // 赋值运算符
+    // Assignment operator
     Tensor& operator=(const Tensor& other);
 
-    // 迁移方法
+    // Migration methods
     Tensor cpu() const;
     Tensor gpu() const;
 
-    // 访问方法
+    // Access methods
     const std::vector<int>& shape() const { return shape_; }
     Device device() const { return device_; }
     size_t size() const { return total_size_; }
