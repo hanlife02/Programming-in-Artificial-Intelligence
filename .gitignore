@@ -5,3 +5,5 @@ results
 *.pth
 __pycache__
 *.png
+.vs
+out
