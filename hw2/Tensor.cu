@@ -4,6 +4,10 @@
 
 // Calculate total tensor elements
 size_t Tensor::calculate_total_size(const std::vector<int>& shape) const {
+    if (shape.empty()) {
+        throw std::invalid_argument("Tensor shape cannot be empty");
+    }
+
     size_t total = 1;
     for (int dim : shape) {
         if (dim <= 0) {
