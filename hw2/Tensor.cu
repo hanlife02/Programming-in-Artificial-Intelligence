@@ -7,7 +7,7 @@ size_t Tensor::calculate_total_size(const std::vector<int>& shape) const {
     size_t total = 1;
     for (int dim : shape) {
         if (dim <= 0) {
-            throw std::invalid_argument("张量维度必须为正数");
+            throw std::invalid_argument("Tensor dimension must be positive");
         }
         total *= dim;
     }
@@ -30,7 +30,7 @@ void Tensor::allocate_memory() {
         // 在GPU上分配内存
         cudaError_t error = cudaMalloc(&data_, total_size_ * sizeof(float));
         if (error != cudaSuccess) {
-            throw std::runtime_error("GPU内存分配失败: " + std::string(cudaGetErrorString(error)));
+            throw std::runtime_error("GPU memory allocation failed: " + std::string(cudaGetErrorString(error)));
         }
         // 初始化GPU内存为0
         cudaMemset(data_, 0, total_size_ * sizeof(float));
@@ -52,7 +52,7 @@ void Tensor::deallocate_memory() {
 // 从另一个张量复制数据
 void Tensor::copy_data_from(const Tensor& other) {
     if (total_size_ != other.total_size_) {
-        throw std::invalid_argument("张量大小不匹配，无法复制数据");
+        throw std::invalid_argument("Tensor sizes do not match, cannot copy data");
     }
 
     if (total_size_ == 0) {
@@ -68,7 +68,7 @@ void Tensor::copy_data_from(const Tensor& other) {
         cudaError_t error = cudaMemcpy(data_, other.data_,
                                       total_size_ * sizeof(float), cudaMemcpyDeviceToDevice);
         if (error != cudaSuccess) {
-            throw std::runtime_error("GPU到GPU数据复制失败: " + std::string(cudaGetErrorString(error)));
+            throw std::runtime_error("GPU to GPU data copy failed: " + std::string(cudaGetErrorString(error)));
         }
     }
     else if (device_ == Device::CPU && other.device_ == Device::GPU) {
@@ -76,7 +76,7 @@ void Tensor::copy_data_from(const Tensor& other) {
         cudaError_t error = cudaMemcpy(data_, other.data_,
                                       total_size_ * sizeof(float), cudaMemcpyDeviceToHost);
         if (error != cudaSuccess) {
-            throw std::runtime_error("GPU到CPU数据复制失败: " + std::string(cudaGetErrorString(error)));
+            throw std::runtime_error("GPU to CPU data copy failed: " + std::string(cudaGetErrorString(error)));
         }
     }
     else {  // device_ == Device::GPU && other.device_ == Device::CPU
@@ -84,7 +84,7 @@ void Tensor::copy_data_from(const Tensor& other) {
         cudaError_t error = cudaMemcpy(data_, other.data_,
                                       total_size_ * sizeof(float), cudaMemcpyHostToDevice);
         if (error != cudaSuccess) {
-            throw std::runtime_error("CPU到GPU数据复制失败: " + std::string(cudaGetErrorString(error)));
+            throw std::runtime_error("CPU to GPU data copy failed: " + std::string(cudaGetErrorString(error)));
         }
     }
 }
