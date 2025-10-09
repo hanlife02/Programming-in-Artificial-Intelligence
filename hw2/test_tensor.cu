@@ -14,9 +14,9 @@ private:
         total_tests++;
         if (condition) {
             passed_tests++;
-            std::cout << "✓ " << test_name << " PASSED" << std::endl;
+            std::cout << "PASS " << test_name << " PASSED" << std::endl;
         } else {
-            std::cout << "✗ " << test_name << " FAILED" << std::endl;
+            std::cout << "FAIL " << test_name << " FAILED" << std::endl;
         }
     }
 
@@ -370,9 +370,9 @@ public:
         std::cout << "\n========================================\n";
         std::cout << "Test Results: " << passed_tests << "/" << total_tests << " tests passed\n";
         if (passed_tests == total_tests) {
-            std::cout << "🎉 All tests PASSED! 🎉\n";
+            std::cout << "All tests PASSED!\n";
         } else {
-            std::cout << "❌ " << (total_tests - passed_tests) << " tests FAILED!\n";
+            std::cout << (total_tests - passed_tests) << " tests FAILED!\n";
         }
         std::cout << "========================================\n";
     }
