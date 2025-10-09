@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include <cstring>
 
-// 计算张量总元素数量
+// Calculate total tensor elements
 size_t Tensor::calculate_total_size(const std::vector<int>& shape) const {
     size_t total = 1;
     for (int dim : shape) {
@@ -14,7 +14,7 @@ size_t Tensor::calculate_total_size(const std::vector<int>& shape) const {
     return total;
 }
 
-// 分配内存
+// Allocate memory
 void Tensor::allocate_memory() {
     if (total_size_ == 0) {
         data_ = nullptr;
@@ -22,22 +22,22 @@ void Tensor::allocate_memory() {
     }
 
     if (device_ == Device::CPU) {
-        // 在CPU上分配内存
+        // Allocate memory on CPU
         data_ = new float[total_size_];
-        // 初始化为0
+        // Initialize to 0
         std::memset(data_, 0, total_size_ * sizeof(float));
     } else {  // Device::GPU
-        // 在GPU上分配内存
+        // Allocate memory on GPU
         cudaError_t error = cudaMalloc(&data_, total_size_ * sizeof(float));
         if (error != cudaSuccess) {
             throw std::runtime_error("GPU memory allocation failed: " + std::string(cudaGetErrorString(error)));
         }
-        // 初始化GPU内存为0
+        // Initialize GPU memory to 0
         cudaMemset(data_, 0, total_size_ * sizeof(float));
     }
 }
 
-// 释放内存
+// Deallocate memory
 void Tensor::deallocate_memory() {
     if (data_ != nullptr) {
         if (device_ == Device::CPU) {
@@ -49,22 +49,22 @@ void Tensor::deallocate_memory() {
     }
 }
 
-// 从另一个张量复制数据
+// Copy data from another tensor
 void Tensor::copy_data_from(const Tensor& other) {
     if (total_size_ != other.total_size_) {
         throw std::invalid_argument("Tensor sizes do not match, cannot copy data");
     }
 
     if (total_size_ == 0) {
-        return;  // 空张量无需复制
+        return;  // Empty tensor, no need to copy
     }
 
     if (device_ == Device::CPU && other.device_ == Device::CPU) {
-        // CPU到CPU：直接内存复制
+        // CPU to CPU: direct memory copy
         std::memcpy(data_, other.data_, total_size_ * sizeof(float));
     }
     else if (device_ == Device::GPU && other.device_ == Device::GPU) {
-        // GPU到GPU：设备间内存复制
+        // GPU to GPU: device to device memory copy
         cudaError_t error = cudaMemcpy(data_, other.data_,
                                       total_size_ * sizeof(float), cudaMemcpyDeviceToDevice);
         if (error != cudaSuccess) {
@@ -72,7 +72,7 @@ void Tensor::copy_data_from(const Tensor& other) {
         }
     }
     else if (device_ == Device::CPU && other.device_ == Device::GPU) {
-        // GPU到CPU：从设备复制到主机
+        // GPU to CPU: device to host copy
         cudaError_t error = cudaMemcpy(data_, other.data_,
                                       total_size_ * sizeof(float), cudaMemcpyDeviceToHost);
         if (error != cudaSuccess) {
@@ -80,7 +80,7 @@ void Tensor::copy_data_from(const Tensor& other) {
         }
     }
     else {  // device_ == Device::GPU && other.device_ == Device::CPU
-        // CPU到GPU：从主机复制到设备
+        // CPU to GPU: host to device copy
         cudaError_t error = cudaMemcpy(data_, other.data_,
                                       total_size_ * sizeof(float), cudaMemcpyHostToDevice);
         if (error != cudaSuccess) {
@@ -89,67 +89,67 @@ void Tensor::copy_data_from(const Tensor& other) {
     }
 }
 
-// 构造函数
+// Constructor
 Tensor::Tensor(const std::vector<int>& shape, Device device)
     : shape_(shape), device_(device) {
     total_size_ = calculate_total_size(shape);
     allocate_memory();
 }
 
-// 拷贝构造函数
+// Copy constructor
 Tensor::Tensor(const Tensor& other)
     : shape_(other.shape_), device_(other.device_), total_size_(other.total_size_) {
     allocate_memory();
     copy_data_from(other);
 }
 
-// 析构函数
+// Destructor
 Tensor::~Tensor() {
     deallocate_memory();
 }
 
-// 赋值运算符：将另一个张量的内容复制到当前张量
+// Assignment operator: copy another tensor's content to current tensor
 Tensor& Tensor::operator=(const Tensor& other) {
     if (this == &other) {
-        return *this;  // 自赋值检查
+        return *this;  // Self-assignment check
     }
 
-    // 释放原有内存
+    // Release original memory
     deallocate_memory();
 
-    // 更新张量属性
+    // Update tensor properties
     shape_ = other.shape_;
     device_ = other.device_;
     total_size_ = other.total_size_;
 
-    // 重新分配内存并复制数据
+    // Reallocate memory and copy data
     allocate_memory();
     copy_data_from(other);
 
     return *this;
 }
 
-// 迁移到CPU
+// Migrate to CPU
 Tensor Tensor::cpu() const {
     if (device_ == Device::CPU) {
-        // 如果已经在CPU上，直接返回副本
+        // If already on CPU, return a copy directly
         return Tensor(*this);
     }
 
-    // 创建CPU张量并复制数据
+    // Create CPU tensor and copy data
     Tensor cpu_tensor(shape_, Device::CPU);
     cpu_tensor.copy_data_from(*this);
     return cpu_tensor;
 }
 
-// 迁移到GPU
+// Migrate to GPU
 Tensor Tensor::gpu() const {
     if (device_ == Device::GPU) {
-        // 如果已经在GPU上，直接返回副本
+        // If already on GPU, return a copy directly
         return Tensor(*this);
     }
 
-    // 创建GPU张量并复制数据
+    // Create GPU tensor and copy data
     Tensor gpu_tensor(shape_, Device::GPU);
     gpu_tensor.copy_data_from(*this);
     return gpu_tensor;
