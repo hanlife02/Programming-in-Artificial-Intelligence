@@ -302,87 +302,6 @@ void conv2d_backward(const float* input, const float* grad_output, const float* 
     cudaFree(col_buffer);
 }
 
-inline int offset_nchw(int n, int c, int h, int w,
-                       int channels, int height, int width) {
-    return ((n * channels + c) * height + h) * width + w;
-}
-
-inline int offset_weight(int co, int ci, int kh, int kw,
-                         int in_channels, int kernel_h, int kernel_w) {
-    return ((co * in_channels + ci) * kernel_h + kh) * kernel_w + kw;
-}
-
-void conv2d_forward_cpu(const std::vector<float>& input,
-                        const std::vector<float>& weights,
-                        const std::vector<float>& bias,
-                        std::vector<float>& output,
-                        int batch, int in_channels, int out_channels,
-                        int height, int width, int kernel_h = 3, int kernel_w = 3,
-                        int pad = 1) {
-    for (int n = 0; n < batch; ++n) {
-        for (int co = 0; co < out_channels; ++co) {
-            for (int h_out = 0; h_out < height; ++h_out) {
-                for (int w_out = 0; w_out < width; ++w_out) {
-                    float val = bias.empty() ? 0.f : bias[co];
-                    for (int ci = 0; ci < in_channels; ++ci) {
-                        for (int kh = 0; kh < kernel_h; ++kh) {
-                            for (int kw = 0; kw < kernel_w; ++kw) {
-                                int h_in = h_out - pad + kh;
-                                int w_in = w_out - pad + kw;
-                                if (h_in < 0 || h_in >= height || w_in < 0 || w_in >= width) {
-                                    continue;
-                                }
-                                val += input[offset_nchw(n, ci, h_in, w_in, in_channels, height, width)] *
-                                       weights[offset_weight(co, ci, kh, kw, in_channels, kernel_h, kernel_w)];
-                            }
-                        }
-                    }
-                    output[offset_nchw(n, co, h_out, w_out, out_channels, height, width)] = val;
-                }
-            }
-        }
-    }
-}
-
-void conv2d_backward_cpu(const std::vector<float>& input,
-                         const std::vector<float>& weights,
-                         const std::vector<float>& grad_output,
-                         std::vector<float>& grad_input,
-                         std::vector<float>& grad_weights,
-                         std::vector<float>& grad_bias,
-                         int batch, int in_channels, int out_channels,
-                         int height, int width, int kernel_h = 3, int kernel_w = 3,
-                         int pad = 1) {
-    std::fill(grad_input.begin(), grad_input.end(), 0.f);
-    std::fill(grad_weights.begin(), grad_weights.end(), 0.f);
-    std::fill(grad_bias.begin(), grad_bias.end(), 0.f);
-
-    for (int n = 0; n < batch; ++n) {
-        for (int co = 0; co < out_channels; ++co) {
-            for (int h_out = 0; h_out < height; ++h_out) {
-                for (int w_out = 0; w_out < width; ++w_out) {
-                    float go = grad_output[offset_nchw(n, co, h_out, w_out, out_channels, height, width)];
-                    grad_bias[co] += go;
-                    for (int ci = 0; ci < in_channels; ++ci) {
-                        for (int kh = 0; kh < kernel_h; ++kh) {
-                            for (int kw = 0; kw < kernel_w; ++kw) {
-                                int h_in = h_out - pad + kh;
-                                int w_in = w_out - pad + kw;
-                                if (h_in >= 0 && h_in < height && w_in >= 0 && w_in < width) {
-                                    int input_idx = offset_nchw(n, ci, h_in, w_in, in_channels, height, width);
-                                    int weight_idx = offset_weight(co, ci, kh, kw, in_channels, kernel_h, kernel_w);
-                                    grad_weights[weight_idx] += go * input[input_idx];
-                                    grad_input[input_idx] += go * weights[weight_idx];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 void test_conv_im2col() {
     int batch = 1;
     int in_channels = 1;
@@ -408,21 +327,10 @@ void test_conv_im2col() {
     };
     std::vector<float> h_bias = {0.5f};
 
-    std::vector<float> h_output_cpu(output_size, 0.f);
-    conv2d_forward_cpu(h_input, h_weights, h_bias, h_output_cpu,
-                       batch, in_channels, out_channels, height, width, kernel, kernel, pad);
-
     std::vector<float> h_grad_output(output_size);
     for (int i = 0; i < output_size; ++i) {
         h_grad_output[i] = 0.1f * (i + 1);
     }
-
-    std::vector<float> h_grad_input_cpu(input_size, 0.f);
-    std::vector<float> h_grad_weights_cpu(weight_size, 0.f);
-    std::vector<float> h_grad_bias_cpu(out_channels, 0.f);
-    conv2d_backward_cpu(h_input, h_weights, h_grad_output,
-                        h_grad_input_cpu, h_grad_weights_cpu, h_grad_bias_cpu,
-                        batch, in_channels, out_channels, height, width, kernel, kernel, pad);
 
     float *d_input, *d_weights, *d_bias;
     float *d_output, *d_grad_output, *d_grad_input, *d_grad_weights, *d_grad_bias;
@@ -462,40 +370,58 @@ void test_conv_im2col() {
     };
 
     bool passed = true;
+    const float expected_forward[] = {
+        -7.5f, -3.5f, -3.5f, 10.5f,
+        -17.5f, -5.5f, -5.5f, 21.5f,
+        -29.5f, -5.5f, -5.5f, 33.5f,
+        -23.5f, -3.5f, -3.5f, 26.5f
+    };
     for (int i = 0; i < output_size; ++i) {
-        if (!almost_equal(h_output_gpu[i], h_output_cpu[i])) {
+        if (!almost_equal(h_output_gpu[i], expected_forward[i])) {
             std::cout << "Conv forward mismatch at index " << i
-                      << ": expected " << h_output_cpu[i]
+                      << ": expected " << expected_forward[i]
                       << ", got " << h_output_gpu[i] << std::endl;
             passed = false;
             break;
         }
     }
 
+    const float expected_grad_input[] = {
+        0.8f, 0.4f, 0.4f, -1.0f,
+        1.8000001f, 0.6f, 0.6f, -2.1f,
+        3.0f, 0.60000014f, 0.6f, -3.3f,
+        2.4f, 0.4000001f, 0.4000001f, -2.6f
+    };
     for (int i = 0; i < input_size && passed; ++i) {
-        if (!almost_equal(h_grad_input_gpu[i], h_grad_input_cpu[i])) {
+        if (!almost_equal(h_grad_input_gpu[i], expected_grad_input[i])) {
             std::cout << "Grad input mismatch at index " << i
-                      << ": expected " << h_grad_input_cpu[i]
+                      << ": expected " << expected_grad_input[i]
                       << ", got " << h_grad_input_gpu[i] << std::endl;
             passed = false;
             break;
         }
     }
 
+    const float expected_grad_weights[] = {
+        69.6f, 96.2f, 73.2f,
+        111.2f, 149.6f, 111.200005f,
+        73.2f, 96.2f, 69.6f
+    };
     for (int i = 0; i < weight_size && passed; ++i) {
-        if (!almost_equal(h_grad_weights_gpu[i], h_grad_weights_cpu[i])) {
+        if (!almost_equal(h_grad_weights_gpu[i], expected_grad_weights[i])) {
             std::cout << "Grad weight mismatch at index " << i
-                      << ": expected " << h_grad_weights_cpu[i]
+                      << ": expected " << expected_grad_weights[i]
                       << ", got " << h_grad_weights_gpu[i] << std::endl;
             passed = false;
             break;
         }
     }
 
+    const float expected_grad_bias[] = {13.6f};
     for (int i = 0; i < out_channels && passed; ++i) {
-        if (!almost_equal(h_grad_bias_gpu[i], h_grad_bias_cpu[i])) {
+        if (!almost_equal(h_grad_bias_gpu[i], expected_grad_bias[i])) {
             std::cout << "Grad bias mismatch at index " << i
-                      << ": expected " << h_grad_bias_cpu[i]
+                      << ": expected " << expected_grad_bias[i]
                       << ", got " << h_grad_bias_gpu[i] << std::endl;
             passed = false;
             break;
