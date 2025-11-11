@@ -3,6 +3,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <iostream>
+#include <vector>
 #include <cmath>
 #include <cfloat>
 
@@ -398,154 +399,269 @@
 //     cudaFree(d_grad_in);
 // }
 
-__global__ void row_max_kernel(const float* input, float* row_max, int rows, int cols) {
-    extern __shared__ float shared[];
-    int row = blockIdx.x;
-    if (row >= rows) {
-        return;
-    }
+// __global__ void row_max_kernel(const float* input, float* row_max, int rows, int cols) {
+//     extern __shared__ float shared[];
+//     int row = blockIdx.x;
+//     if (row >= rows) {
+//         return;
+//     }
 
-    float max_val = -FLT_MAX;
-    for (int col = threadIdx.x; col < cols; col += blockDim.x) {
-        int idx = row * cols + col;
-        max_val = fmaxf(max_val, input[idx]);
-    }
+//     float max_val = -FLT_MAX;
+//     for (int col = threadIdx.x; col < cols; col += blockDim.x) {
+//         int idx = row * cols + col;
+//         max_val = fmaxf(max_val, input[idx]);
+//     }
 
-    shared[threadIdx.x] = max_val;
-    __syncthreads();
+//     shared[threadIdx.x] = max_val;
+//     __syncthreads();
 
-    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-        if (threadIdx.x < stride) {
-            shared[threadIdx.x] = fmaxf(shared[threadIdx.x], shared[threadIdx.x + stride]);
-        }
-        __syncthreads();
-    }
+//     for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+//         if (threadIdx.x < stride) {
+//             shared[threadIdx.x] = fmaxf(shared[threadIdx.x], shared[threadIdx.x + stride]);
+//         }
+//         __syncthreads();
+//     }
 
-    if (threadIdx.x == 0) {
-        row_max[row] = shared[0];
-    }
-}
+//     if (threadIdx.x == 0) {
+//         row_max[row] = shared[0];
+//     }
+// }
 
-__global__ void subtract_max_kernel(const float* input, const float* row_max,
-                                    float* output, int rows, int cols) {
+// __global__ void subtract_max_kernel(const float* input, const float* row_max,
+//                                     float* output, int rows, int cols) {
+//     int index = blockIdx.x * blockDim.x + threadIdx.x;
+//     int total = rows * cols;
+//     if (index >= total) {
+//         return;
+//     }
+//     int row = index / cols;
+//     output[index] = input[index] - row_max[row];
+// }
+
+// __global__ void exp_kernel(float* data, int count) {
+//     int index = blockIdx.x * blockDim.x + threadIdx.x;
+//     if (index >= count) {
+//         return;
+//     }
+//     data[index] = expf(data[index]);
+// }
+
+// __global__ void row_sum_kernel(const float* input, float* row_sum, int rows, int cols) {
+//     extern __shared__ float shared[];
+//     int row = blockIdx.x;
+//     if (row >= rows) {
+//         return;
+//     }
+
+//     float sum_val = 0.f;
+//     for (int col = threadIdx.x; col < cols; col += blockDim.x) {
+//         int idx = row * cols + col;
+//         sum_val += input[idx];
+//     }
+
+//     shared[threadIdx.x] = sum_val;
+//     __syncthreads();
+
+//     for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+//         if (threadIdx.x < stride) {
+//             shared[threadIdx.x] += shared[threadIdx.x + stride];
+//         }
+//         __syncthreads();
+//     }
+
+//     if (threadIdx.x == 0) {
+//         row_sum[row] = shared[0];
+//     }
+// }
+
+// __global__ void normalize_kernel(float* data, const float* row_sum, int rows, int cols) {
+//     int index = blockIdx.x * blockDim.x + threadIdx.x;
+//     int total = rows * cols;
+//     if (index >= total) {
+//         return;
+//     }
+//     int row = index / cols;
+//     float denom = row_sum[row];
+//     data[index] = (denom > 0.f) ? (data[index] / denom) : 0.f;
+// }
+
+// void softmax_forward(const float* input, float* output, int batch_size, int num_classes) {
+//     int total = batch_size * num_classes;
+//     float* d_row_max;
+//     float* d_row_sum;
+//     cudaMalloc(&d_row_max, batch_size * sizeof(float));
+//     cudaMalloc(&d_row_sum, batch_size * sizeof(float));
+
+//     int threads_per_block = 256;
+//     size_t shared_mem = threads_per_block * sizeof(float);
+
+//     row_max_kernel<<<batch_size, threads_per_block, shared_mem>>>(input, d_row_max, batch_size, num_classes);
+
+//     int blocks = (total + threads_per_block - 1) / threads_per_block;
+//     subtract_max_kernel<<<blocks, threads_per_block>>>(input, d_row_max, output, batch_size, num_classes);
+//     exp_kernel<<<blocks, threads_per_block>>>(output, total);
+
+//     row_sum_kernel<<<batch_size, threads_per_block, shared_mem>>>(output, d_row_sum, batch_size, num_classes);
+
+//     normalize_kernel<<<blocks, threads_per_block>>>(output, d_row_sum, batch_size, num_classes);
+
+//     cudaFree(d_row_max);
+//     cudaFree(d_row_sum);
+// }
+
+// void test_softmax_forward() {
+//     int batch = 2;
+//     int classes = 3;
+//     float h_input[] = {1.f, 2.f, 3.f,
+//                        1.f, 2.f, 4.f};
+
+//     float expected_output[] = {
+//         0.09003058f, 0.24472848f, 0.66524094f,
+//         0.04201007f, 0.1141952f, 0.8437947f
+//     };
+
+//     float *d_input, *d_output;
+//     cudaMalloc(&d_input, batch * classes * sizeof(float));
+//     cudaMalloc(&d_output, batch * classes * sizeof(float));
+
+//     cudaMemcpy(d_input, h_input, batch * classes * sizeof(float), cudaMemcpyHostToDevice);
+
+//     softmax_forward(d_input, d_output, batch, classes);
+
+//     float h_output[6] = {0};
+//     cudaMemcpy(h_output, d_output, batch * classes * sizeof(float), cudaMemcpyDeviceToHost);
+
+//     int passed = 1;
+//     for (int i = 0; i < batch * classes; ++i) {
+//         if (std::fabs(h_output[i] - expected_output[i]) > 1e-5f) {
+//             std::cout << "Softmax mismatch at index " << i
+//                       << ": expected " << expected_output[i]
+//                       << ", got " << h_output[i] << std::endl;
+//             passed = 0;
+//         }
+//     }
+
+//     if (passed) {
+//         printf("Softmax forward test passed!\n");
+//     }
+
+//     cudaFree(d_input);
+//     cudaFree(d_output);
+// }
+
+__global__ void cross_entropy_loss_kernel(const float* probs, const int* labels,
+                                          float* loss_buffer, int batch_size, int num_classes) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = rows * cols;
-    if (index >= total) {
+    if (index >= batch_size) {
         return;
     }
-    int row = index / cols;
-    output[index] = input[index] - row_max[row];
+    int label = labels[index];
+    float prob = probs[index * num_classes + label];
+    prob = fmaxf(prob, 1e-12f);
+    loss_buffer[index] = -logf(prob);
 }
 
-__global__ void exp_kernel(float* data, int count) {
+float cross_entropy_loss_forward(const float* probs, const int* labels,
+                                 int batch_size, int num_classes) {
+    float* d_loss_buffer;
+    cudaMalloc(&d_loss_buffer, batch_size * sizeof(float));
+
+    int threads = 256;
+    int blocks = (batch_size + threads - 1) / threads;
+    cross_entropy_loss_kernel<<<blocks, threads>>>(probs, labels, d_loss_buffer, batch_size, num_classes);
+
+    std::vector<float> h_losses(batch_size, 0.f);
+    cudaMemcpy(h_losses.data(), d_loss_buffer, batch_size * sizeof(float), cudaMemcpyDeviceToHost);
+
+    float total_loss = 0.f;
+    for (float val : h_losses) {
+        total_loss += val;
+    }
+
+    cudaFree(d_loss_buffer);
+    return total_loss / batch_size;
+}
+
+__global__ void softmax_cross_entropy_backward_kernel(const float* probs, const int* labels,
+                                                      float* grad_input, int batch_size, int num_classes) {
     int index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= count) {
-        return;
-    }
-    data[index] = expf(data[index]);
-}
-
-__global__ void row_sum_kernel(const float* input, float* row_sum, int rows, int cols) {
-    extern __shared__ float shared[];
-    int row = blockIdx.x;
-    if (row >= rows) {
-        return;
-    }
-
-    float sum_val = 0.f;
-    for (int col = threadIdx.x; col < cols; col += blockDim.x) {
-        int idx = row * cols + col;
-        sum_val += input[idx];
-    }
-
-    shared[threadIdx.x] = sum_val;
-    __syncthreads();
-
-    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
-        if (threadIdx.x < stride) {
-            shared[threadIdx.x] += shared[threadIdx.x + stride];
-        }
-        __syncthreads();
-    }
-
-    if (threadIdx.x == 0) {
-        row_sum[row] = shared[0];
-    }
-}
-
-__global__ void normalize_kernel(float* data, const float* row_sum, int rows, int cols) {
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
-    int total = rows * cols;
-    if (index >= total) {
-        return;
-    }
-    int row = index / cols;
-    float denom = row_sum[row];
-    data[index] = (denom > 0.f) ? (data[index] / denom) : 0.f;
-}
-
-void softmax_forward(const float* input, float* output, int batch_size, int num_classes) {
     int total = batch_size * num_classes;
-    float* d_row_max;
-    float* d_row_sum;
-    cudaMalloc(&d_row_max, batch_size * sizeof(float));
-    cudaMalloc(&d_row_sum, batch_size * sizeof(float));
-
-    int threads_per_block = 256;
-    size_t shared_mem = threads_per_block * sizeof(float);
-
-    row_max_kernel<<<batch_size, threads_per_block, shared_mem>>>(input, d_row_max, batch_size, num_classes);
-
-    int blocks = (total + threads_per_block - 1) / threads_per_block;
-    subtract_max_kernel<<<blocks, threads_per_block>>>(input, d_row_max, output, batch_size, num_classes);
-    exp_kernel<<<blocks, threads_per_block>>>(output, total);
-
-    row_sum_kernel<<<batch_size, threads_per_block, shared_mem>>>(output, d_row_sum, batch_size, num_classes);
-
-    normalize_kernel<<<blocks, threads_per_block>>>(output, d_row_sum, batch_size, num_classes);
-
-    cudaFree(d_row_max);
-    cudaFree(d_row_sum);
+    if (index >= total) {
+        return;
+    }
+    int row = index / num_classes;
+    int col = index % num_classes;
+    int label = labels[row];
+    float grad = probs[index];
+    if (col == label) {
+        grad -= 1.f;
+    }
+    grad_input[index] = grad / batch_size;
 }
 
-void test_softmax_forward() {
+void cross_entropy_with_softmax_backward(const float* probs, const int* labels,
+                                         float* grad_input, int batch_size, int num_classes) {
+    int total = batch_size * num_classes;
+    int threads = 256;
+    int blocks = (total + threads - 1) / threads;
+    softmax_cross_entropy_backward_kernel<<<blocks, threads>>>(probs, labels, grad_input, batch_size, num_classes);
+}
+
+void test_softmax_cross_entropy() {
     int batch = 2;
     int classes = 3;
     float h_input[] = {1.f, 2.f, 3.f,
                        1.f, 2.f, 4.f};
+    int h_labels[] = {2, 1};
 
-    float expected_output[] = {
-        0.09003058f, 0.24472848f, 0.66524094f,
-        0.04201007f, 0.1141952f, 0.8437947f
+    float expected_loss = 1.288726f;
+    float expected_grad[] = {
+        0.04501529f, 0.12236424f, -0.16737953f,
+        0.02100503f, -0.4429024f, 0.42189735f
     };
 
-    float *d_input, *d_output;
+    float *d_input, *d_probs, *d_grad;
+    int *d_labels;
     cudaMalloc(&d_input, batch * classes * sizeof(float));
-    cudaMalloc(&d_output, batch * classes * sizeof(float));
+    cudaMalloc(&d_probs, batch * classes * sizeof(float));
+    cudaMalloc(&d_grad, batch * classes * sizeof(float));
+    cudaMalloc(&d_labels, batch * sizeof(int));
 
     cudaMemcpy(d_input, h_input, batch * classes * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_labels, h_labels, batch * sizeof(int), cudaMemcpyHostToDevice);
 
-    softmax_forward(d_input, d_output, batch, classes);
+    softmax_forward(d_input, d_probs, batch, classes);
+    float loss = cross_entropy_loss_forward(d_probs, d_labels, batch, classes);
 
-    float h_output[6] = {0};
-    cudaMemcpy(h_output, d_output, batch * classes * sizeof(float), cudaMemcpyDeviceToHost);
+    cross_entropy_with_softmax_backward(d_probs, d_labels, d_grad, batch, classes);
+
+    float h_grad[6] = {0};
+    cudaMemcpy(h_grad, d_grad, batch * classes * sizeof(float), cudaMemcpyDeviceToHost);
 
     int passed = 1;
+    if (std::fabs(loss - expected_loss) > 1e-5f) {
+        std::cout << "Cross entropy loss mismatch: expected " << expected_loss
+                  << ", got " << loss << std::endl;
+        passed = 0;
+    }
+
     for (int i = 0; i < batch * classes; ++i) {
-        if (std::fabs(h_output[i] - expected_output[i]) > 1e-5f) {
-            std::cout << "Softmax mismatch at index " << i
-                      << ": expected " << expected_output[i]
-                      << ", got " << h_output[i] << std::endl;
+        if (std::fabs(h_grad[i] - expected_grad[i]) > 1e-5f) {
+            std::cout << "Cross entropy grad mismatch at index " << i
+                      << ": expected " << expected_grad[i]
+                      << ", got " << h_grad[i] << std::endl;
             passed = 0;
         }
     }
 
     if (passed) {
-        printf("Softmax forward test passed!\n");
+        printf("Softmax + CrossEntropy test passed!\n");
     }
 
     cudaFree(d_input);
-    cudaFree(d_output);
+    cudaFree(d_probs);
+    cudaFree(d_grad);
+    cudaFree(d_labels);
 }
 
 int main(){ 
@@ -553,6 +669,7 @@ int main(){
     // test_backward_fc();
     // test_max_pool_forward();
     // test_max_pool_backward();
-    test_softmax_forward();
+    // test_softmax_forward();
+    test_softmax_cross_entropy();
     return 0; 
 } 
