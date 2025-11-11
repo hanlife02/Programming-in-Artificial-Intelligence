@@ -3,12 +3,13 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-// GEMM , C(m,n) = A(m,k) * B(k,n)    (C = alpha × (A × B) + beta × C)
-void gemm_gpu(const float *A, const float *B, float *C, const int m,const int k, const int n) {
+
+// GEMM , C(m,n) = A(m,k) * B(k,n)^T    (C = alpha × (A × B^T) + beta × C)
+// A:INPUT ,B:WEIGHT ,C:OUTPUT
+void gemm_gpu(const int m, const int n, const int k,  float alf, const float *A, const float *B, float bet, float *C) {
     int lda = m, ldb = k, ldc = m;
-    const float alf = 1, bet = 0;
-    const float *alpha = &alf;
-    const float *beta = &bet;
+    float *alpha = &alf;
+    float *beta = &bet;
     // Create a handle for CUBLAS
     cublasHandle_t handle; cublasCreate(&handle);
     // Do the actual multiplication
@@ -22,6 +23,10 @@ void gemm_gpu(const float *A, const float *B, float *C, const int m,const int k,
 }
 
 // Fully connected layer forward pass
-void fully_connected_forward_gpu(float* input, float* weights, float* output, int batch_size, int in_feature, int out_feature) {
-    gemm_gpu(weights, input, output, batch_size, in_feature, out_feature);
+void forward_fc(float* input, float* output, float* weights, float* bias,
+                int batch_size, int in_features, int out_features) {
+    // matrix product with gemm
+    gemm_gpu(batch_size, out_features, in_features, 1.0, input, weights, 0.0, output);
+    // add bias
+    gemm_gpu(batch_size, out_features, out_features, 1.0, bias, ones_, 1.0, output);
 }
