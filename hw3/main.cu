@@ -6,7 +6,6 @@
 #include <vector>
 #include <cmath>
 #include <cfloat>
-#include <curand.h>
 
 #define CUDA_KERNEL_LOOP(i, n) \
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; \
@@ -20,13 +19,6 @@ __global__ void scale_shift_kernel(float* data, size_t count, float scale) {
     }
     float val = data[idx];
     data[idx] = (val - 0.5f) * 2.0f * scale;
-}
-
-void initialize_with_curand(float* data, size_t count, float scale, curandGenerator_t gen) {
-    curandGenerateUniform(gen, data, count);
-    int threads = 256;
-    int blocks = static_cast<int>((count + threads - 1) / threads);
-    scale_shift_kernel<<<blocks, threads>>>(data, count, scale);
 }
 
 __global__ void im2col_kernel(const int n, const float* data_im,
