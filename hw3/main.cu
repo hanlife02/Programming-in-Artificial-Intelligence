@@ -37,10 +37,10 @@ void test_forward_fc(){
     int m = 2, k = 3, n = 4;
     float h_input[] = {1, 2, 3,
                        4, 5, 6};
-    float h_weights[] = {0.1, 0.2, 0.3,
-                         0.4, 0.5, 0.6,
-                         0.7, 0.8, 0.9,
-                         1.0, 1.1, 1.2};
+    float h_weights[] = {1, 0, 1,
+                         0, 1, 1,
+                         1, 1, 0,
+                         0, 0, 1};
     float h_bias[] = {0.5, 0.5, 0.5, 0.5};
     float h_output[8] = {0};
 
