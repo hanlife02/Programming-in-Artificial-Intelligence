@@ -20,8 +20,7 @@ const float* get_device_ones(int length) {
 }
 }
 
-// GEMM , C(m,n) = A(m,k) * B(k,n)^T    (C = alpha × (A × B^T) + beta × C)
-// A:INPUT ,B:WEIGHT ,C:OUTPUT
+// GEMM , C(m,n) = A(m,k) * B(k,n)^T  
 void gemm_gpu(const int m, const int n, const int k,  float alf, const float *A, const float *B, float bet, float *C) {
     int lda = m, ldb = k, ldc = m;
     float *alpha = &alf;
