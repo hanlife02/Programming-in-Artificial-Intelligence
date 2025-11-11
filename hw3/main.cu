@@ -228,104 +228,312 @@
 //     cudaFree(d_grad_bias);
 // }
 
-__global__ void max_pool_forward_kernel(const float* in_data, float* out_data, float* out_mask,
-                                        int nthreads, int num, int channels,
-                                        int in_h, int in_w, int out_h, int out_w,
-                                        int kernel_h, int kernel_w, int stride_h, int stride_w) {
-    CUDA_KERNEL_LOOP(index, nthreads) {
-        int n = index / (channels * out_h * out_w);
-        int c = (index / (out_h * out_w)) % channels;
-        int ph = (index / out_w) % out_h;
-        int pw = index % out_w;
+// __global__ void max_pool_forward_kernel(const float* in_data, float* out_data, float* out_mask,
+//                                         int nthreads, int num, int channels,
+//                                         int in_h, int in_w, int out_h, int out_w,
+//                                         int kernel_h, int kernel_w, int stride_h, int stride_w) {
+//     CUDA_KERNEL_LOOP(index, nthreads) {
+//         int n = index / (channels * out_h * out_w);
+//         int c = (index / (out_h * out_w)) % channels;
+//         int ph = (index / out_w) % out_h;
+//         int pw = index % out_w;
 
-        int hstart = ph * stride_h;
-        int wstart = pw * stride_w;
+//         int hstart = ph * stride_h;
+//         int wstart = pw * stride_w;
 
-        float max_val = -FLT_MAX;
-        int max_idx = -1;
+//         float max_val = -FLT_MAX;
+//         int max_idx = -1;
 
-        for (int kh = 0; kh < kernel_h; ++kh) {
-            for (int kw = 0; kw < kernel_w; ++kw) {
-                int h = hstart + kh;
-                int w = wstart + kw;
-                int in_index = ((n * channels + c) * in_h + h) * in_w + w;
-                float val = in_data[in_index];
-                if (val > max_val) {
-                    max_val = val;
-                    max_idx = in_index;
-                }
-            }
+//         for (int kh = 0; kh < kernel_h; ++kh) {
+//             for (int kw = 0; kw < kernel_w; ++kw) {
+//                 int h = hstart + kh;
+//                 int w = wstart + kw;
+//                 int in_index = ((n * channels + c) * in_h + h) * in_w + w;
+//                 float val = in_data[in_index];
+//                 if (val > max_val) {
+//                     max_val = val;
+//                     max_idx = in_index;
+//                 }
+//             }
+//         }
+
+//         out_data[index] = max_val;
+//         if (out_mask != nullptr) {
+//             out_mask[index] = static_cast<float>(max_idx);
+//         }
+//     }
+// }
+
+// __global__ void max_pool_backward_kernel(const float* grad_out, const float* mask,
+//                                          float* grad_in, int nthreads) {
+//     CUDA_KERNEL_LOOP(index, nthreads) {
+//         int in_index = static_cast<int>(mask[index]);
+//         if (in_index >= 0) {
+//             atomicAdd(&grad_in[in_index], grad_out[index]);
+//         }
+//     }
+// }
+
+// void max_pool_forward_layer(float* input, float* output, float* mask,
+//                             int num, int channels, int height, int width) {
+//     const int kernel_h = 2, kernel_w = 2;
+//     const int stride_h = 2, stride_w = 2;
+//     int out_h = height / 2;
+//     int out_w = width / 2;
+//     int nthreads = num * channels * out_h * out_w;
+//     int threads = 256;
+//     int blocks = (nthreads + threads - 1) / threads;
+//     max_pool_forward_kernel<<<blocks, threads>>>(input, output, mask,
+//                                                  nthreads, num, channels,
+//                                                  height, width, out_h, out_w,
+//                                                  kernel_h, kernel_w, stride_h, stride_w);
+// }
+
+// void max_pool_backward_layer(float* grad_out, float* mask, float* grad_in,
+//                              int num, int channels, int height, int width) {
+//     int out_h = height / 2;
+//     int out_w = width / 2;
+//     int nthreads = num * channels * out_h * out_w;
+//     cudaMemset(grad_in, 0, num * channels * height * width * sizeof(float));
+//     int threads = 256;
+//     int blocks = (nthreads + threads - 1) / threads;
+//     max_pool_backward_kernel<<<blocks, threads>>>(grad_out, mask, grad_in, nthreads);
+// }
+
+// void test_max_pool_forward() {
+//     int num = 1, channels = 1, height = 4, width = 4;
+//     float h_input[] = {
+//         1.f, 2.f, 3.f, 4.f,
+//         5.f, 6.f, 7.f, 8.f,
+//         9.f, 10.f, 11.f, 12.f,
+//         13.f, 14.f, 15.f, 16.f
+//     };
+//     float expected_output[] = {6.f, 8.f, 14.f, 16.f};
+
+//     float *d_input, *d_output, *d_mask;
+//     cudaMalloc(&d_input, num * channels * height * width * sizeof(float));
+//     cudaMalloc(&d_output, num * channels * (height / 2) * (width / 2) * sizeof(float));
+//     cudaMalloc(&d_mask, num * channels * (height / 2) * (width / 2) * sizeof(float));
+
+//     cudaMemcpy(d_input, h_input, num * channels * height * width * sizeof(float), cudaMemcpyHostToDevice);
+
+//     max_pool_forward_layer(d_input, d_output, d_mask, num, channels, height, width);
+
+//     float h_output[4] = {0};
+//     cudaMemcpy(h_output, d_output, sizeof(h_output), cudaMemcpyDeviceToHost);
+
+//     int passed = 1;
+//     for (int i = 0; i < 4; ++i) {
+//         if (std::fabs(h_output[i] - expected_output[i]) > 1e-5f) {
+//             std::cout << "MaxPool forward mismatch at index " << i
+//                       << ": expected " << expected_output[i]
+//                       << ", got " << h_output[i] << std::endl;
+//             passed = 0;
+//         }
+//     }
+
+//     if (passed) {
+//         printf("MaxPool forward test passed!\n");
+//     }
+
+//     cudaFree(d_input);
+//     cudaFree(d_output);
+//     cudaFree(d_mask);
+// }
+
+// void test_max_pool_backward() {
+//     int num = 1, channels = 1, height = 4, width = 4;
+//     float h_input[] = {
+//         1.f, 2.f, 3.f, 4.f,
+//         5.f, 6.f, 7.f, 8.f,
+//         9.f, 10.f, 11.f, 12.f,
+//         13.f, 14.f, 15.f, 16.f
+//     };
+//     float h_grad_out[] = {1.f, 2.f, 3.f, 4.f};
+//     float expected_grad_in[] = {
+//         0.f, 0.f, 0.f, 0.f,
+//         0.f, 1.f, 0.f, 2.f,
+//         0.f, 0.f, 0.f, 0.f,
+//         0.f, 3.f, 0.f, 4.f
+//     };
+
+//     size_t input_bytes = num * channels * height * width * sizeof(float);
+//     size_t output_bytes = num * channels * (height / 2) * (width / 2) * sizeof(float);
+
+//     float *d_input, *d_output, *d_mask;
+//     float *d_grad_out, *d_grad_in;
+//     cudaMalloc(&d_input, input_bytes);
+//     cudaMalloc(&d_output, output_bytes);
+//     cudaMalloc(&d_mask, output_bytes);
+//     cudaMalloc(&d_grad_out, output_bytes);
+//     cudaMalloc(&d_grad_in, input_bytes);
+
+//     cudaMemcpy(d_input, h_input, input_bytes, cudaMemcpyHostToDevice);
+//     max_pool_forward_layer(d_input, d_output, d_mask, num, channels, height, width);
+
+//     cudaMemcpy(d_grad_out, h_grad_out, output_bytes, cudaMemcpyHostToDevice);
+//     max_pool_backward_layer(d_grad_out, d_mask, d_grad_in, num, channels, height, width);
+
+//     float h_grad_in[16] = {0};
+//     cudaMemcpy(h_grad_in, d_grad_in, input_bytes, cudaMemcpyDeviceToHost);
+
+//     int passed = 1;
+//     for (int i = 0; i < 16; ++i) {
+//         if (std::fabs(h_grad_in[i] - expected_grad_in[i]) > 1e-5f) {
+//             std::cout << "MaxPool backward mismatch at index " << i
+//                       << ": expected " << expected_grad_in[i]
+//                       << ", got " << h_grad_in[i] << std::endl;
+//             passed = 0;
+//         }
+//     }
+
+//     if (passed) {
+//         printf("MaxPool backward test passed!\n");
+//     }
+
+//     cudaFree(d_input);
+//     cudaFree(d_output);
+//     cudaFree(d_mask);
+//     cudaFree(d_grad_out);
+//     cudaFree(d_grad_in);
+// }
+
+__global__ void row_max_kernel(const float* input, float* row_max, int rows, int cols) {
+    extern __shared__ float shared[];
+    int row = blockIdx.x;
+    if (row >= rows) {
+        return;
+    }
+
+    float max_val = -FLT_MAX;
+    for (int col = threadIdx.x; col < cols; col += blockDim.x) {
+        int idx = row * cols + col;
+        max_val = fmaxf(max_val, input[idx]);
+    }
+
+    shared[threadIdx.x] = max_val;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            shared[threadIdx.x] = fmaxf(shared[threadIdx.x], shared[threadIdx.x + stride]);
         }
+        __syncthreads();
+    }
 
-        out_data[index] = max_val;
-        if (out_mask != nullptr) {
-            out_mask[index] = static_cast<float>(max_idx);
-        }
+    if (threadIdx.x == 0) {
+        row_max[row] = shared[0];
     }
 }
 
-__global__ void max_pool_backward_kernel(const float* grad_out, const float* mask,
-                                         float* grad_in, int nthreads) {
-    CUDA_KERNEL_LOOP(index, nthreads) {
-        int in_index = static_cast<int>(mask[index]);
-        if (in_index >= 0) {
-            atomicAdd(&grad_in[in_index], grad_out[index]);
+__global__ void subtract_max_kernel(const float* input, const float* row_max,
+                                    float* output, int rows, int cols) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = rows * cols;
+    if (index >= total) {
+        return;
+    }
+    int row = index / cols;
+    output[index] = input[index] - row_max[row];
+}
+
+__global__ void exp_kernel(float* data, int count) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= count) {
+        return;
+    }
+    data[index] = expf(data[index]);
+}
+
+__global__ void row_sum_kernel(const float* input, float* row_sum, int rows, int cols) {
+    extern __shared__ float shared[];
+    int row = blockIdx.x;
+    if (row >= rows) {
+        return;
+    }
+
+    float sum_val = 0.f;
+    for (int col = threadIdx.x; col < cols; col += blockDim.x) {
+        int idx = row * cols + col;
+        sum_val += input[idx];
+    }
+
+    shared[threadIdx.x] = sum_val;
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            shared[threadIdx.x] += shared[threadIdx.x + stride];
         }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        row_sum[row] = shared[0];
     }
 }
 
-void max_pool_forward_layer(float* input, float* output, float* mask,
-                            int num, int channels, int height, int width) {
-    const int kernel_h = 2, kernel_w = 2;
-    const int stride_h = 2, stride_w = 2;
-    int out_h = height / 2;
-    int out_w = width / 2;
-    int nthreads = num * channels * out_h * out_w;
-    int threads = 256;
-    int blocks = (nthreads + threads - 1) / threads;
-    max_pool_forward_kernel<<<blocks, threads>>>(input, output, mask,
-                                                 nthreads, num, channels,
-                                                 height, width, out_h, out_w,
-                                                 kernel_h, kernel_w, stride_h, stride_w);
+__global__ void normalize_kernel(float* data, const float* row_sum, int rows, int cols) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = rows * cols;
+    if (index >= total) {
+        return;
+    }
+    int row = index / cols;
+    float denom = row_sum[row];
+    data[index] = (denom > 0.f) ? (data[index] / denom) : 0.f;
 }
 
-void max_pool_backward_layer(float* grad_out, float* mask, float* grad_in,
-                             int num, int channels, int height, int width) {
-    int out_h = height / 2;
-    int out_w = width / 2;
-    int nthreads = num * channels * out_h * out_w;
-    cudaMemset(grad_in, 0, num * channels * height * width * sizeof(float));
-    int threads = 256;
-    int blocks = (nthreads + threads - 1) / threads;
-    max_pool_backward_kernel<<<blocks, threads>>>(grad_out, mask, grad_in, nthreads);
+void softmax_forward(const float* input, float* output, int batch_size, int num_classes) {
+    int total = batch_size * num_classes;
+    float* d_row_max;
+    float* d_row_sum;
+    cudaMalloc(&d_row_max, batch_size * sizeof(float));
+    cudaMalloc(&d_row_sum, batch_size * sizeof(float));
+
+    int threads_per_block = 256;
+    size_t shared_mem = threads_per_block * sizeof(float);
+
+    row_max_kernel<<<batch_size, threads_per_block, shared_mem>>>(input, d_row_max, batch_size, num_classes);
+
+    int blocks = (total + threads_per_block - 1) / threads_per_block;
+    subtract_max_kernel<<<blocks, threads_per_block>>>(input, d_row_max, output, batch_size, num_classes);
+    exp_kernel<<<blocks, threads_per_block>>>(output, total);
+
+    row_sum_kernel<<<batch_size, threads_per_block, shared_mem>>>(output, d_row_sum, batch_size, num_classes);
+
+    normalize_kernel<<<blocks, threads_per_block>>>(output, d_row_sum, batch_size, num_classes);
+
+    cudaFree(d_row_max);
+    cudaFree(d_row_sum);
 }
 
-void test_max_pool_forward() {
-    int num = 1, channels = 1, height = 4, width = 4;
-    float h_input[] = {
-        1.f, 2.f, 3.f, 4.f,
-        5.f, 6.f, 7.f, 8.f,
-        9.f, 10.f, 11.f, 12.f,
-        13.f, 14.f, 15.f, 16.f
+void test_softmax_forward() {
+    int batch = 2;
+    int classes = 3;
+    float h_input[] = {1.f, 2.f, 3.f,
+                       1.f, 2.f, 4.f};
+
+    float expected_output[] = {
+        0.09003058f, 0.24472848f, 0.66524094f,
+        0.04201007f, 0.1141952f, 0.8437947f
     };
-    float expected_output[] = {6.f, 8.f, 14.f, 16.f};
 
-    float *d_input, *d_output, *d_mask;
-    cudaMalloc(&d_input, num * channels * height * width * sizeof(float));
-    cudaMalloc(&d_output, num * channels * (height / 2) * (width / 2) * sizeof(float));
-    cudaMalloc(&d_mask, num * channels * (height / 2) * (width / 2) * sizeof(float));
+    float *d_input, *d_output;
+    cudaMalloc(&d_input, batch * classes * sizeof(float));
+    cudaMalloc(&d_output, batch * classes * sizeof(float));
 
-    cudaMemcpy(d_input, h_input, num * channels * height * width * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_input, h_input, batch * classes * sizeof(float), cudaMemcpyHostToDevice);
 
-    max_pool_forward_layer(d_input, d_output, d_mask, num, channels, height, width);
+    softmax_forward(d_input, d_output, batch, classes);
 
-    float h_output[4] = {0};
-    cudaMemcpy(h_output, d_output, sizeof(h_output), cudaMemcpyDeviceToHost);
+    float h_output[6] = {0};
+    cudaMemcpy(h_output, d_output, batch * classes * sizeof(float), cudaMemcpyDeviceToHost);
 
     int passed = 1;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < batch * classes; ++i) {
         if (std::fabs(h_output[i] - expected_output[i]) > 1e-5f) {
-            std::cout << "MaxPool forward mismatch at index " << i
+            std::cout << "Softmax mismatch at index " << i
                       << ": expected " << expected_output[i]
                       << ", got " << h_output[i] << std::endl;
             passed = 0;
@@ -333,75 +541,18 @@ void test_max_pool_forward() {
     }
 
     if (passed) {
-        printf("MaxPool forward test passed!\n");
+        printf("Softmax forward test passed!\n");
     }
 
     cudaFree(d_input);
     cudaFree(d_output);
-    cudaFree(d_mask);
-}
-
-void test_max_pool_backward() {
-    int num = 1, channels = 1, height = 4, width = 4;
-    float h_input[] = {
-        1.f, 2.f, 3.f, 4.f,
-        5.f, 6.f, 7.f, 8.f,
-        9.f, 10.f, 11.f, 12.f,
-        13.f, 14.f, 15.f, 16.f
-    };
-    float h_grad_out[] = {1.f, 2.f, 3.f, 4.f};
-    float expected_grad_in[] = {
-        0.f, 0.f, 0.f, 0.f,
-        0.f, 1.f, 0.f, 2.f,
-        0.f, 0.f, 0.f, 0.f,
-        0.f, 3.f, 0.f, 4.f
-    };
-
-    size_t input_bytes = num * channels * height * width * sizeof(float);
-    size_t output_bytes = num * channels * (height / 2) * (width / 2) * sizeof(float);
-
-    float *d_input, *d_output, *d_mask;
-    float *d_grad_out, *d_grad_in;
-    cudaMalloc(&d_input, input_bytes);
-    cudaMalloc(&d_output, output_bytes);
-    cudaMalloc(&d_mask, output_bytes);
-    cudaMalloc(&d_grad_out, output_bytes);
-    cudaMalloc(&d_grad_in, input_bytes);
-
-    cudaMemcpy(d_input, h_input, input_bytes, cudaMemcpyHostToDevice);
-    max_pool_forward_layer(d_input, d_output, d_mask, num, channels, height, width);
-
-    cudaMemcpy(d_grad_out, h_grad_out, output_bytes, cudaMemcpyHostToDevice);
-    max_pool_backward_layer(d_grad_out, d_mask, d_grad_in, num, channels, height, width);
-
-    float h_grad_in[16] = {0};
-    cudaMemcpy(h_grad_in, d_grad_in, input_bytes, cudaMemcpyDeviceToHost);
-
-    int passed = 1;
-    for (int i = 0; i < 16; ++i) {
-        if (std::fabs(h_grad_in[i] - expected_grad_in[i]) > 1e-5f) {
-            std::cout << "MaxPool backward mismatch at index " << i
-                      << ": expected " << expected_grad_in[i]
-                      << ", got " << h_grad_in[i] << std::endl;
-            passed = 0;
-        }
-    }
-
-    if (passed) {
-        printf("MaxPool backward test passed!\n");
-    }
-
-    cudaFree(d_input);
-    cudaFree(d_output);
-    cudaFree(d_mask);
-    cudaFree(d_grad_out);
-    cudaFree(d_grad_in);
 }
 
 int main(){ 
     // test_forward_fc(); 
     // test_backward_fc();
-    test_max_pool_forward();
-    test_max_pool_backward();
+    // test_max_pool_forward();
+    // test_max_pool_backward();
+    test_softmax_forward();
     return 0; 
 } 
