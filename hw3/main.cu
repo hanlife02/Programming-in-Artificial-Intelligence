@@ -22,7 +22,7 @@ const float* get_device_ones(int length) {
 
 // GEMM , C(m,n) = A(m,k) * B(k,n)^T  
 void gemm_gpu(const int m, const int n, const int k,  float alf, const float *A, const float *B, float bet, float *C) {
-    int lda = m, ldb = k, ldc = m;
+    int lda = m, ldb = n, ldc = m;
     float *alpha = &alf;
     float *beta = &bet;
     // Create a handle for CUBLAS
