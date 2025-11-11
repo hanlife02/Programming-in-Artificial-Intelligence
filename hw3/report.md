@@ -17,8 +17,9 @@
 
 ## Conv2D (im2col + GEMM)
 - **核心函数设计**：`im2col_kernel` 将输入 patch 展平，`conv2d_forward` 先 `im2col` 再 `cublasSgemm` 完成 `W * X_patch`，并通过一次 `ones` GEMM 加 bias。反向传播中，`conv2d_backward` 使用 `cublasSgemm` 计算 `∂W`、`∂b`，再用 `col2im_kernel` 将 `∂X_patch` 聚合回输入梯度，实现 `col2im`。
+- **问题修复**：梯度回传阶段的 `∂X` 需要乘以 `W^T`，原先误将 `weights` 视作 `(out_channels, kernel_dim)` 参与乘法，导致 `Grad input mismatch at index 0: expected 0.8, got 0.6`。本次修复将 `cublasSgemm` 第二个操作数改为 `CUBLAS_OP_T`，保证 `grad_output_matrix` 与 `weights^T` 相乘，`col2im` 后即可得到正确的输入梯度。
 - **正确性测试**：`test_conv_im2col` 构造 1×1×4×4 输入与 3×3 kernel，给出手工推导的 forward 输出以及 `∂X/∂W/∂b` 期望值，逐元素比较。
-- **测试结果**：运行程序显示 `Conv im2col test passed!`，证明 im2col+GEMM+col2im 全链路正确。
+- **测试结果**：修复后再次运行程序，`Grad input mismatch` 不再出现，并重新看到 `Conv im2col test passed!`，证明 im2col+GEMM+col2im 全链路正确。
 
 ## 运行方式
 ```bash

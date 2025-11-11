@@ -283,7 +283,7 @@ void conv2d_backward(const float* input, const float* grad_output, const float* 
     float* grad_col;
     cudaMalloc(&grad_col, kernel_dim * n_cols * sizeof(float));
     cublasSgemm(handle,
-                CUBLAS_OP_N, CUBLAS_OP_N,
+                CUBLAS_OP_N, CUBLAS_OP_T,
                 n_cols, kernel_dim, out_channels,
                 &alpha,
                 grad_output_matrix, n_cols,
