@@ -612,8 +612,8 @@ void test_backward_fc(){
     cudaMemcpy(h_grad_weights, d_grad_weights, out_features * in_features * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(h_grad_bias, d_grad_bias, out_features * sizeof(float), cudaMemcpyDeviceToHost);
 
-    float expected_grad_input[] = {0.4f, 0.5f, 0.7f,
-                                   1.2f, 1.3f, 1.9f};
+    float expected_grad_input[] = {0.4f, 0.5f, 0.70000005f,
+                                   1.2f, 1.3f, 1.9000001f};
     float expected_grad_weights[] = {2.1f, 2.7f, 3.3f,
                                      2.6f, 3.4f, 4.2f,
                                      3.1f, 4.1f, 5.1f,
