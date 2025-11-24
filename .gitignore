@@ -10,5 +10,4 @@ out
 *.txt
 CMakeFiles
 .vscode
-src
 build
