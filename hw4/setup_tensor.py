@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 __version__ = '0.0.1'
-sources = ['src/Tensor.h']
+sources = ['src/Tensor.cu', 'src/TensorBindings.cpp']
 setup(
     name='mytensor',
     version=__version__,
@@ -16,7 +16,8 @@ setup(
     ext_modules=[
         CUDAExtension(
         name='mytensor',
-        sources=sources)
+        sources=sources,
+        include_dirs=['src'])
     ],
     cmdclass={
         'build_ext': BuildExtension
