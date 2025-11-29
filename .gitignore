@@ -11,3 +11,7 @@ out
 CMakeFiles
 .vscode
 build
+data
+*.log
+*.pyd
+pybind11

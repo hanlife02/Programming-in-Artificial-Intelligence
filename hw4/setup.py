@@ -1,8 +1,20 @@
 import os
+from pathlib import Path
+
+CUDA_ROOT = Path(r"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9")
+os.environ["CUDA_HOME"] = str(CUDA_ROOT)
+os.environ["CUDA_PATH"] = str(CUDA_ROOT)
+
 from setuptools import setup, find_packages
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
+
 __version__ = '0.0.1'
-sources = ['src/Tensor.cu', 'src/TensorBindings.cpp']
+sources = [
+    'src/Tensor.cu',
+    'src/ActivationFunctions.cu',
+    'src/Modules.cu',
+    'src/TensorBindings.cpp',
+]
 setup(
     name='mytensor',
     version=__version__,
@@ -15,9 +27,12 @@ setup(
     license='MIT',
     ext_modules=[
         CUDAExtension(
-        name='mytensor',
-        sources=sources,
-        include_dirs=['src'])
+            name='mytensor',
+            sources=sources,
+            include_dirs=['src'],
+            libraries=['cublas'],
+            library_dirs=[str(CUDA_ROOT / "lib/x64")],
+        )
     ],
     cmdclass={
         'build_ext': BuildExtension
