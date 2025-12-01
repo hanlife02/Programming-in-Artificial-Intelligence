@@ -15,3 +15,4 @@ data
 *.log
 *.pyd
 pybind11
+report.pdf
