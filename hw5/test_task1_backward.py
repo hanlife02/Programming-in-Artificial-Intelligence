@@ -120,14 +120,14 @@ if __name__ == "__main__":
     ## 可以分别测试每个函数
     test_power_scalar_backward()
     # test_ewisepow_backward()
-    # test_divide_backward()
-    # test_divide_scalar_backward()
+    test_divide_backward()
+    test_divide_scalar_backward()
     # test_matmul_backward()
-    # test_summation_backward()
-    # test_broadcast_to_backward()
-    # test_reshape_backward()
-    # test_negate_backward()
-    # test_transpose_backward()
+    test_summation_backward()
+    test_broadcast_to_backward()
+    test_reshape_backward()
+    test_negate_backward()
+    test_transpose_backward()
     ## log 和 exp 的测试没写...
     ## 交作业的时候也是会测试的...
     
